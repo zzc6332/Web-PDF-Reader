@@ -1,0 +1,2 @@
+import "./pdfjsLib";
+import "./handleConsole";

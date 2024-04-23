@@ -1,0 +1,27 @@
+/* ant-input-number */
+.ant-input-number-inverse .ant-input-number-handler-wrap {
+  inset-inline-start: 0;
+  opacity: 1;
+  border-start-start-radius: 6px;
+  border-end-start-radius: 6px;
+  border-end-end-radius: 0;
+  border-start-end-radius: 0;
+}
+
+.ant-input-number-inverse .ant-input-number-handler {
+  border-left-width: 0px;
+  border-right-width: 1px;
+}
+
+.ant-input-number-inverse .ant-input-number-handler-up {
+  border-start-end-radius: 0;
+}
+
+.ant-input-number-inverse .ant-input-number-handler-down {
+  border-end-end-radius: 0;
+}
+
+.ant-input-number-inverse .ant-input-number-input {
+  text-align: end;
+  font-size: 16px;
+}
