@@ -31,8 +31,11 @@ function parseSize(size: string) {
 
 //#region - 定义初始 state
 
-const renderState = {
+const initialState = {
   documentContainer: null as HTMLDivElement | null,
+};
+
+const renderState = {
   pdfDocument: null as PDFDocumentProxy | null,
   pages: [] as PDFPageProxy[],
   loadingTask: null as PDFDocumentLoadingTask | null,
@@ -44,6 +47,7 @@ const scaleState = {
   scale: 1,
   viewScale: 1,
   scaleMappingRatio: 4 / 3,
+  viewScaleRange: [0.25, 4],
 };
 
 const pageNumState = {
@@ -65,19 +69,21 @@ const layoutState = {
 
 interface EventHandlers {
   cancelRender: [];
-  setViewScale: [number, number];
+  setViewScale: [number, number, number | undefined, number | undefined];
 }
 
 type Emitter = {
   emitter: EventEmitter<EventHandlers>;
 };
 
-type ScaleState = typeof scaleState;
+type InitialState = typeof initialState;
 type RenderState = typeof renderState;
+type ScaleState = typeof scaleState;
 type PageNumState = typeof pageNumState;
 type LayoutState = typeof layoutState;
 
 type ResetStateActions = {
+  resetInitialState: () => void;
   resetRenderState: () => void;
   resetScaleState: () => void;
   resetPageNumState: () => void;
@@ -92,14 +98,23 @@ type RenderActions = {
 
 type ScaleActions = {
   setScale: (scale: number) => void;
-  setViewScale: (viewScale: number) => void;
+  setViewScale: (
+    viewScale: number,
+    scaleOriginLeft?: number,
+    scaleOriginTop?: number
+  ) => void;
   getNewScroll: (
     preViewScale: number,
-    preScrollHeight: number,
     preScrollWidth: number,
-    preScrollTop: number,
+    preScrollHeight: number,
     preScrollLeft: number,
-    documentContainer: HTMLDivElement
+    preScrollTop: number,
+    newScrollWidth: number,
+    newScrollHeight: number,
+    scrollOriginLeft: number,
+    scrollOriginTop: number,
+    clientWidth: number,
+    clientHeigh: number
   ) => {
     newScrollTop: number;
     newScrollLeft: number;
@@ -108,6 +123,7 @@ type ScaleActions = {
   commitScale: () => void;
   getActualScale: () => number;
   getActualViewScale: () => number;
+  getSafeScaleValue: (n: number) => number;
 };
 
 type PageNumActions = {
@@ -134,8 +150,9 @@ type LayoutActions = {
 
 const usePdfReaderStore = create<
   Emitter &
-    ScaleState &
+    InitialState &
     RenderState &
+    ScaleState &
     PageNumState &
     LayoutState &
     ResetStateActions &
@@ -147,47 +164,52 @@ const usePdfReaderStore = create<
   persist(
     (set, get) => ({
       emitter: new EventEmitter<EventHandlers>(),
-      ...scaleState,
+      ...initialState,
       ...renderState,
+      ...scaleState,
       ...pageNumState,
       ...layoutState,
       //#region - 定义 actions
 
       //#region - resetStateActions
-      resetPageNumState: () => {
-        set(pageNumState);
+      resetInitialState: () => {
+        set(initialState);
+      },
+      resetRenderState: () => {
+        set(renderState);
       },
       resetScaleState: () => {
+        set(pageNumState);
+      },
+      resetPageNumState: () => {
         set(pageNumState);
       },
       resetLayoutState: () => {
         set(pageNumState);
       },
-      resetRenderState: () => {
-        set(renderState);
-      },
       //#endregion
 
-      //#region - renderActions
+      //#region - initialActions
 
       // specifyDocumentContainer 用于指定 documentContainer 的 DOM 元素
       specifyDocumentContainer: (documentContainer) => {
         set({ documentContainer });
       },
 
+      //#endregion
+
+      //#region - renderActions
+
       // useLoading 用于获取 pages，pdfDocument，loadingTask
       useLoading: () => {
-        const [pages, pdfDocument, loadingTask] = usePdfLoading(get().pdfPath);
-        useEffect(() => {
-          if (pages.length > 0) set({ pages });
-          // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [pages]);
+        const [loadingTask, pdfDocument, pages] = usePdfLoading(get().pdfPath);
+        set({ loadingTask });
         useEffect(() => {
           if (pdfDocument) set({ pdfDocument });
         }, [pdfDocument]);
         useEffect(() => {
-          if (loadingTask) set({ loadingTask });
-        }, [loadingTask]);
+          set({ pages });
+        }, [pages]);
       },
 
       setIsRendering: (bool) => {
@@ -202,45 +224,41 @@ const usePdfReaderStore = create<
         set({ scale });
       },
 
-      setViewScale: (newViewScale) => {
+      setViewScale: (newViewScale, scaleOriginLeft, scaleOriginTop) => {
         set({ viewScale: newViewScale });
         const { documentContainer } = get();
         if (!documentContainer) return;
         const { scrollLeft, scrollTop } = documentContainer;
-        get().emitter.emit("setViewScale", scrollLeft, scrollTop);
+        get().emitter.emit(
+          "setViewScale",
+          scrollLeft,
+          scrollTop,
+          scaleOriginLeft,
+          scaleOriginTop
+        );
       },
 
       // getNewScroll 会在 ResizeObserver 的回调中被调用，监视的元素为 documentContainer 内部的子元素
       getNewScroll: (
         preViewScale,
-        preScrollHeight,
         preScrollWidth,
-        preScrollTop,
+        preScrollHeight,
         preScrollLeft,
-        documentContainer
+        preScrollTop,
+        newScrollWidth,
+        newScrollHeight,
+        scrollOriginLeft,
+        scrollOriginTop,
+        clientWidth,
+        clientHeight
       ) => {
         // 修改 viewScale 时获取视口的新的 scroll
         const newViewScale = get().viewScale;
 
-        console.log(
-          "documentContainer.scrollTop: ",
-          documentContainer.scrollTop,
-          "documentContainer.scrollLeft: ",
-          documentContainer.scrollLeft
-        );
-
-        const { clientHeight, clientWidth, scrollHeight, scrollWidth } =
-          documentContainer;
-
-        console.log("scrollHeight", scrollHeight);
-        console.log("preScrollHeight", preScrollHeight);
-        console.log("scrollWidth", scrollWidth);
-        console.log("preScrollWidth", preScrollWidth);
-
         // 判断 documentContainer 中的内容是否有溢出（出现滚动条）
-        const isHeightOverflow = scrollHeight > clientHeight;
+        const isHeightOverflow = newScrollHeight > clientHeight;
         const wasHeightOverflow = preScrollHeight > clientHeight;
-        const isWidthOverflow = scrollWidth > clientWidth;
+        const isWidthOverflow = newScrollWidth > clientWidth;
         const wasWidthOverflow = preScrollWidth > clientWidth;
 
         const padding = parseSize(get().padding);
@@ -253,7 +271,7 @@ const usePdfReaderStore = create<
           // 之后都是缩放后高度溢出的情况
         } else if (wasHeightOverflow) {
           // 如果缩放前高度已经溢出
-          const preCenterDistanceY = preScrollTop + clientHeight / 2;
+          const preCenterDistanceY = preScrollTop + scrollOriginTop;
           const centerPageNum = get().getPageNumAndPageOffsetByDistance(
             preCenterDistanceY,
             get().mapScale(preViewScale)
@@ -262,48 +280,34 @@ const usePdfReaderStore = create<
           const newCenterDistanceY =
             ((preCenterDistanceY - paddingSum) * newViewScale) / preViewScale +
             paddingSum;
-          newScrollTop = newCenterDistanceY - clientHeight / 2;
-
-          console.log(
-            "preCenterDistanceY = preScrollTop + clientHeight / 2 -----" +
-              `${preCenterDistanceY} = ${preScrollTop} + ${clientHeight} / 2`,
-            "\npaddingSum = padding * centerPageNum -----" +
-              `${paddingSum} = ${padding} * ${centerPageNum}`,
-            "\nnewCenterDistanceY = ((preCenterDistanceY - paddingSum) * newViewScale) / preViewScale + paddingSum -----" +
-              `${newCenterDistanceY} = ((${preCenterDistanceY} - ${paddingSum}) * ${newViewScale}) / ${preViewScale} + ${paddingSum}`,
-            "\nnewScrollTop = newCenterDistanceY - clientHeight / 2" +
-              `${newScrollTop} = ${newCenterDistanceY} - ${clientHeight} / 2`
-          );
+          newScrollTop = newCenterDistanceY - scrollOriginTop;
         } else {
           // 如果缩放前高度没有溢出
-          newScrollTop = (scrollHeight - clientHeight) / 2;
+          newScrollTop = newScrollHeight / 2 - scrollOriginTop;
         }
 
         let newScrollLeft: number;
 
         if (!isWidthOverflow) {
-          // 如果缩放后宽度没有溢出，即 newScrollX 为 0
+          // 如果缩放后宽度没有溢出，即 newScrollLeft 为 0
           newScrollLeft = 0;
           // 之后都是缩放后宽度溢出的情况
         } else if (wasWidthOverflow) {
           // 如果缩放前宽度已经溢出
-          const preCenterDistanceX = preScrollLeft + clientWidth / 2;
+          const preCenterDistanceX = preScrollLeft + scrollOriginLeft;
           const newCenterDistanceX =
             ((preCenterDistanceX - padding) * newViewScale) / preViewScale +
             padding;
-          newScrollLeft = newCenterDistanceX - clientWidth / 2;
+          newScrollLeft = newCenterDistanceX - scrollOriginLeft;
         } else {
           // 如果缩放前宽度没有溢出
-          newScrollLeft = (scrollWidth - clientWidth) / 2;
+          newScrollLeft = newScrollWidth / 2 - scrollOriginLeft;
         }
 
         return {
           newScrollTop: Math.round(newScrollTop),
           newScrollLeft: Math.round(newScrollLeft),
         };
-
-        // documentContainer.scrollTop = Math.round(newDocScrollTop);
-        // documentContainer.scrollLeft = Math.round(newDocScrollLeft);
       },
 
       mapScale: (scaleInApp: number) => scaleInApp * get().scaleMappingRatio,
@@ -327,6 +331,10 @@ const usePdfReaderStore = create<
       // 获取转换后的用于 PdfJS 内部的 scale
       getActualScale: () => get().mapScale(get().scale),
       getActualViewScale: () => get().mapScale(get().viewScale),
+
+      // 将接收的值限定到合法的 scale 值的范围中
+      getSafeScaleValue: (n) =>
+        Math.max(Math.min(n, get().viewScaleRange[1]), get().viewScaleRange[0]),
 
       //#endregion
 
@@ -378,7 +386,6 @@ const usePdfReaderStore = create<
         }
 
         const pages = get().pages;
-        // const el = e.target as HTMLDivElement;
         const el = get().documentContainer;
         if (!el) return;
         // currentDocScrollY 当前整个文档的 Y 方向偏移量
@@ -430,7 +437,6 @@ const usePdfReaderStore = create<
           set({ currentTopPageNum });
       },
 
-      // getPageNumAndPageOffsetByDistance 可以接收一个 数值计算出对应的 topPageNum 和 pageScrollY
       /**
        * getPageNumAndPageOffsetByDistance 可以根据一个相对文档顶部的距离，计算出其对应的页码，以及该距离对应页顶部的偏移距离
        * @param distance 相对文档顶部的距离

@@ -28,7 +28,7 @@ export default memo(function PageTool({
   useEffect(() => {
     if (currentPageNum === 0 && pages.length !== 0) updateCurrentPageNum();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pages.length]);
+  }, [pages]);
 
   const [inputValue, setInputValue] = useState<string>(currentPageNum + "");
   useEffect(() => {

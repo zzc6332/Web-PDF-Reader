@@ -17,7 +17,7 @@ export default memo(function MainContent({
   return (
     <div className={"flex " + className}>
       <ThumbnailsContainer className="flex-none" />
-      <DocumentContainer className="" />
+      <DocumentContainer />
     </div>
   );
 });

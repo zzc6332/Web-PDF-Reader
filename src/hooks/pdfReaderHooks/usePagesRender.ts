@@ -3,26 +3,29 @@ import {
   GetViewportParameters,
   RenderTask,
 } from "pdfjs-dist/types/src/display/api";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
+/**
+ * 在组件中传入 PDFPageProxy[] 调用 usePagesRender 后会得到将要渲染这些 pages 的 canvas 元素组成的数组，以及它们的 renderTasks
+ * @param pages
+ * @param getViewportParameters
+ * @returns [ HTMLCanvasElement[], RenderTask[] ]
+ */
 export default function usePagesRender(
   pages: PDFPageProxy[],
-  // canvasElRef: React.RefObject<HTMLCanvasElement>,
   getViewportParameters: GetViewportParameters = { scale: 1 }
 ) {
   const { scale } = getViewportParameters;
 
-  const [, setState] = useState(0);
-  const update = () => {
-    setState((s) => s + 1);
-  };
-
-  const canvasElsRef = useRef<HTMLCanvasElement[]>([]);
-  const renderTasksRef = useRef<RenderTask[]>([]);
+  const [canvasEls, setCanvasEls] = useState<HTMLCanvasElement[]>([]);
+  const [renderTasks, setRenderTasks] = useState<RenderTask[]>([]);
 
   useEffect(() => {
+    if (pages.length === 0) return;
+    let canvasEls: HTMLCanvasElement[] = [];
+    let renderTasks: RenderTask[] = [];
     pages.forEach((page) => {
-      const index = page._pageIndex;
+      // const index = page._pageIndex;
       const viewport = page.getViewport(getViewportParameters);
 
       // 创建 canvas 元素，并使用自定义属性标记它的 scale
@@ -31,27 +34,24 @@ export default function usePagesRender(
       canvasEl.setAttribute("width", viewport.width + "");
       canvasEl.setAttribute("height", viewport.height + "");
       canvasEl.style.setProperty("transform-origin", "top left");
-      canvasElsRef.current[index] = canvasEl;
+      canvasEls = [...canvasEls, canvasEl];
 
       const canvasContext = canvasEl.getContext("2d");
       if (!canvasContext) return;
 
       const renderTask = page.render({ canvasContext, viewport });
-      renderTasksRef.current = [...renderTasksRef.current, renderTask];
+      renderTasks = [...renderTasks, renderTask];
     });
-
-    update();
+    setRenderTasks(renderTasks);
+    setCanvasEls(canvasEls);
 
     return () => {
-      canvasElsRef.current = [];
-      renderTasksRef.current = [];
+      setCanvasEls([]);
+      setRenderTasks([]);
     };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, scale]);
 
-  return [canvasElsRef.current, renderTasksRef.current] as [
-    HTMLCanvasElement[],
-    RenderTask[]
-  ];
+  return [canvasEls, renderTasks] as [HTMLCanvasElement[], RenderTask[]];
 }

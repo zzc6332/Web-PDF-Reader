@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Icon,
   IconProps,
@@ -16,55 +16,29 @@ interface ZoomToolsProps extends Props {
 //#region - Slider 相关静态参数和工具函数
 
 // SliderValue 的范围
-const sliderMinValue = 0;
-const sliderMaxValue = 16;
-const sliderValueRange = [sliderMinValue, sliderMaxValue];
+// const sliderMinValue = 0;
+// const sliderMaxValue = 15;
+// const sliderValueRange = [sliderMinValue, sliderMaxValue];
 
 // sliderStep 是 Slider 组件的步长
 const sliderStep = 0.1;
 
 /**
  * sliderToScale 接收一个 sliderValue，将其映射为 scaleValue
- * - 确保接收的值一定来自 sliderValue，否则可能超出范围
  * @param sliderValue
  * @returns 映射后的 scaleValue
  */
 function sliderToScale(sliderValue: number) {
-  if (sliderValue >= 0 && sliderValue <= 1) {
-    return 0.01 * (24 * sliderValue + 1);
-  } else if (sliderValue > 1 && sliderValue <= 16) {
-    return 0.25 * sliderValue;
-  } else {
-    // 如果 sliderValue 来源正确，则不会进入该分支
-    throw new Error("sliderToScale(input) 接收的参数范围错误");
-  }
+  return 0.25 * (sliderValue + 1);
 }
 
 /**
- * getSafeScaleValue 用于将输入参数转换到合法范围的 scaleValue 后输出
- * @param n
- * @returns 合法的 scaleValue
- */
-function getSafeScaleValue(n: number) {
-  const range = sliderValueRange.map((item) => sliderToScale(item));
-  return Math.max(Math.min(n, range[1]), range[0]);
-}
-
-/**
- * scaleToSlider 接收一个 scaleValue，经过 getSafeScaleValue 处理后将其映射为 sliderValue
+ * scaleToSlider 接收一个 scaleValue，将其映射为 sliderValue
  * @param receivedScaleValue
  * @returns 映射后的 sliderValue
  */
-function scaleToSlider(receivedScaleValue: number) {
-  const scaleValue = getSafeScaleValue(receivedScaleValue);
-  if (scaleValue >= 0.01 && scaleValue <= 0.25) {
-    return (100 * scaleValue - 1) / 24;
-  } else if (scaleValue > 0.25 && scaleValue <= 4) {
-    return 4 * scaleValue;
-  } else {
-    // 如果 getSafeScaleValue 符合预期，则不会进入到该分支
-    throw new Error("scaleToSlider(output) 接收的参数范围错误");
-  }
+function scaleToSlider(scaleValue: number) {
+  return 4 * scaleValue - 1;
 }
 
 //#endregion
@@ -103,41 +77,37 @@ export default memo(function ZoomTool({
   //#region - 从 store 中获取 state
 
   const scale = usePdfReaderStore((s) => s.scale);
+  const viewScale = usePdfReaderStore((s) => s.viewScale);
   const setViewScale = usePdfReaderStore((s) => s.setViewScale);
   const commitScale = usePdfReaderStore((s) => s.commitScale);
+  const viewScaleRange = usePdfReaderStore((s) => s.viewScaleRange);
+  const getSafeScaleValue = usePdfReaderStore((s) => s.getSafeScaleValue);
 
   const commitScaleImmediately = () => {
     commitScaleOnClick.cancel();
     commitScaleOnDrag.cancel();
-    setTimeout(() => {
+    // 为了确保调用 commitScale 时，viewScale 已更新，因此将其异步调用
+    Promise.resolve().then(() => {
       commitScale();
     });
     // console.log("0");
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const commitScaleOnClick = useCallback(
-    debounce(
-      () => {
-        commitScaleOnDrag.cancel();
-        commitScale();
-        // console.log("200");
-      },
-      200,
-      {}
-    ),
+    debounce(() => {
+      commitScaleOnDrag.cancel();
+      commitScale();
+      // console.log("200");
+    }, 200),
     []
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const commitScaleOnDrag = useCallback(
-    debounce(
-      () => {
-        commitScaleOnClick.cancel();
-        commitScale();
-        // console.log("1000");
-      },
-      1000,
-      {}
-    ),
+    debounce(() => {
+      commitScaleOnClick.cancel();
+      commitScale();
+      // console.log("500");
+    }, 500),
     []
   );
 
@@ -145,24 +115,14 @@ export default memo(function ZoomTool({
 
   //#region - Slider 组件相关
 
-  // sliderValue 是受控组件 Slider 上的 value，确保只通过 setSliderValueSafely 来修改它的值，使得它的范围永远符合预期
-  const [sliderValue, setSliderValue] = useState(7);
-
-  // 组件刚加载时获取初始的 sliderValue
-  useEffect(() => {
-    setSliderValueSafely(scaleToSlider(scale));
-    return () => {};
+  //#region - SLider 组件相关初始参数
+  const sliderValueRange: number[] = useMemo(
+    () => viewScaleRange.map((viewScaleValue) => scaleToSlider(viewScaleValue)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    [viewScaleRange]
+  );
 
-  // scaleValue 是根据 sliderValue 的值映射出来的缩放比
-  const scaleValue = sliderToScale(sliderValue);
-
-  // store 中的 viewScale 被 sliderValue 管理
-  useEffect(() => {
-    setViewScale(scaleValue);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sliderValue]);
+  const [sliderMinValue, sliderMaxValue] = sliderValueRange;
 
   /**
    * setSliderValueSafely 用于将输入参数转换到合法范围内后设置给 sliderValue
@@ -184,6 +144,42 @@ export default memo(function ZoomTool({
     const targetValue = sliderValue + offset;
     setSliderValueSafely(Math.round(targetValue / offset) * offset);
   }
+
+  //#endregion
+
+  // sliderValue 是受控组件 Slider 上的 value，确保只通过 setSliderValueSafely 来修改它的值，使得它的范围永远符合预期
+  const [sliderValue, setSliderValue] = useState(3);
+
+  // 组件刚加载时获取初始的 sliderValue
+  const [isSliderValueInitialed, setIsSliderValueInitialed] = useState(false);
+  useEffect(() => {
+    setSliderValueSafely(scaleToSlider(scale));
+    setIsSliderValueInitialed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // scaleValue 是根据 sliderValue 的值映射出来的缩放比
+  const scaleValue = sliderToScale(sliderValue);
+
+  // store 中的 viewScale 被 sliderValue 管理
+  useEffect(() => {
+    if (viewScale !== scaleValue) {
+      setViewScale(scaleValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sliderValue]);
+
+  // 如果 viewScale 发生了变化 ，sliderValue 也同步改变
+  useEffect(() => {
+    // 初始化完成后才开始同步
+    if (!isSliderValueInitialed) return;
+    const newSliderValue = scaleToSlider(viewScale);
+    if (Math.abs(sliderValue - newSliderValue) >= sliderStep) {
+      setSliderValueSafely(newSliderValue);
+      console.log("sliderValue: ", newSliderValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewScale]);
 
   // Slider 组件 Dom 获取，为不同 DOM 处理监听事件
   const sliderRef = useRef<HTMLDivElement>(null);
@@ -254,9 +250,12 @@ export default memo(function ZoomTool({
       setAutoCompletetValue(scalePercentage);
       return;
     }
-    const sliderValue = scaleToSlider(percentageToNum(value));
+    const scaleValue = getSafeScaleValue(percentageToNum(value));
+    const sliderValue = scaleToSlider(scaleValue);
     setSliderValueSafely(sliderValue);
     commitScaleImmediately();
+    // 为了避免一些情况下 AutoCompletetValue 没有更新，此处手动更新一下
+    setAutoCompletetValue(numToPercentage(scaleValue));
   }
 
   // AutoComplete 中输入内容时弹出下拉列表

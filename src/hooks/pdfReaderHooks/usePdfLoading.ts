@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
@@ -7,54 +7,55 @@ import {
 
 import * as pdfjsLib from "pdfjs-dist";
 
+/**
+ * 在组件中调用 usePdfLoading 后获取到使用 pdfjs 解析 pdf 文档后得到的 [ PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy[] ]
+ * - PDFDocumentLoadingTask 最开始就能获取到
+ * - PDFDocumentProxy 获取到后会触发重新渲染
+ * - PDFPageProxy 全部获取完成后会触发重新渲染
+ * @param pdfPath
+ * @returns [ PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy[] ]
+ */
 export default function usePdfLoading(pdfPath: string) {
-  const [, setState] = useState(0);
-  const update = () => {
-    setState((s) => s + 1);
-  };
+  // loadingTask 可以直接得到，而 PDFPageProxy 和 PDFDocumentProxy 需要异步获取
+  const loadingTask = useMemo(() => pdfjsLib.getDocument(pdfPath), [pdfPath]);
 
-  const pagesRef = useRef<PDFPageProxy[]>([]);
-  const documentRef = useRef<PDFDocumentProxy>();
-  const loadingTaskRef = useRef<PDFDocumentLoadingTask>();
+  const [pages, setPages] = useState<PDFPageProxy[]>([]);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy>();
 
   useEffect(() => {
-    async function getpages() {
-      const loadingTask = pdfjsLib.getDocument(pdfPath);
-      loadingTaskRef.current = loadingTask;
+    async function getDocumentAndpages() {
       const pdfDocument = await loadingTask.promise;
-      documentRef.current = pdfDocument;
-      // 获取到 pdfDocument 和 loadingTaskRef 时就更新
-      update();
+      setPdfDocument(pdfDocument);
+
+      // 异步获取到所有的 pageProxy 后触发更新
       const { numPages } = pdfDocument;
+      const getPagePromises = [];
       for (let i = 1; i <= numPages; i++) {
-        pagesRef.current = [...pagesRef.current, await pdfDocument.getPage(i)];
-        // pagesRef.current[i] = await pdfDocument.getPage(i);
-        // 读取 2 页时就触发 re-render，之后每读取 10 页就更新
-        if (i % 5 === 2) update();
+        const getPagePromise = pdfDocument.getPage(i);
+        getPagePromises.push(getPagePromise);
       }
-      // 将剩余未渲染的页都安排上
-      if (numPages % 5 !== 2) update();
-      // 获取到所有 pages 之后更新
-      // update();
+      const pages = await Promise.all(getPagePromises);
+      setPages(pages);
     }
-    getpages();
+
+    getDocumentAndpages();
+
     return () => {
-      if (documentRef.current) {
-        documentRef.current.cleanup();
-        documentRef.current.destroy();
+      if (pdfDocument) {
+        pdfDocument.cleanup();
+        pdfDocument.destroy();
       }
-      if (loadingTaskRef.current) {
-        loadingTaskRef.current.destroy();
-      }
-      pagesRef.current.forEach((page) => {
+      loadingTask.destroy();
+      pages.forEach((page) => {
         page.cleanup();
       });
     };
-  }, [pdfPath]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingTask, pdfPath]);
 
-  return [pagesRef.current, documentRef.current, loadingTaskRef.current] as [
-    PDFPageProxy[],
+  return [loadingTask, pdfDocument, pages] as [
+    PDFDocumentLoadingTask,
     PDFDocumentProxy | undefined,
-    PDFDocumentLoadingTask | undefined
+    PDFPageProxy[]
   ];
 }
