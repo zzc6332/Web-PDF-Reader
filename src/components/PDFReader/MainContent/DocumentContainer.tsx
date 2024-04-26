@@ -96,7 +96,7 @@ export default memo(function DocumentContainer({
             }}
           >
             {/* 内层的 container，用于包裹渲染内容和背景色 */}
-            <div className="relative size-full shadow">
+            <div className="relative size-full outline-l1">
               {/* 包裹 canvas 的 container */}
               <div
                 className="absolute left-0 top-0"

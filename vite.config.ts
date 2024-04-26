@@ -3,6 +3,8 @@ import UnoCSS from "unocss/vite";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 import topLevelAwait from "vite-plugin-top-level-await";
+// import SemiPlugin from "vite-plugin-semi-theme";
+import SemiPlugin from "./vite-plugins/vite-plugin-semi-theme";
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -20,6 +22,10 @@ export default defineConfig({
       promiseExportName: "__tla",
       // The function to generate import names of top-level await promise in each chunk module
       promiseImportName: (i) => `__tla_${i}`,
+    }),
+    SemiPlugin({
+      theme: "@semi-bot/semi-theme-together",
+      include: "~@semi-bot/semi-theme-together/scss/local.scss",
     }),
   ],
 });

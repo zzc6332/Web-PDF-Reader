@@ -5,7 +5,7 @@ import Icon, { IconProps } from "src/components/GlobalComponents/Icon";
 import ToggleButton from "src/components/GlobalComponents/ToggleButton";
 import Props from "src/types/props";
 import { colors } from "src/configs/theme";
-import useGlobalStore from "../../../stores/useGlobalStore";
+import useThemeStore from "src/stores/useThemeStore";
 
 const iconProps: Omit<IconProps, "type"> = {
   padding: "0.25rem",
@@ -19,11 +19,12 @@ interface ToolBarProps extends Props {}
 
 export default memo(function ToolBar(props: ToolBarProps) {
   const { className } = props;
-  const setThemeIndex = useGlobalStore((s) => s.setThemeIndex);
-  const themeIndex = useGlobalStore((s) => s.themeIndex);
+  const setThemeIndex = useThemeStore((s) => s.setThemeIndex);
+  const themeIndex = useThemeStore((s) => s.themeIndex);
+  const setSemiTheme = useThemeStore((s) => s.setSemiTheme);
   return (
     <div
-      className={"relative h-12 w-full bg-bg-2 z-1 shadow " + className}
+      className={"relative h-12 w-full bg-bg-2 z-1 outline-l1 " + className}
       // style={{ boxShadow: "0 1px 8px rgb(0 0 0 / 0.1)" }}
     >
       {/* 左侧缩略图控制图标 */}
@@ -49,6 +50,7 @@ export default memo(function ToolBar(props: ToolBarProps) {
           className={"mx-2 h-6 w-px bg-on-bg-1 select-none"}
           onClick={() => {
             setThemeIndex(themeIndex ? 0 : 1);
+            setSemiTheme(themeIndex ? 0 : 1);
           }}
         ></div>
         <ZoomTool className="flex items-center" iconProps={iconProps} />

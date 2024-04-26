@@ -7,10 +7,12 @@ interface ToggleButtonProps extends Omit<Props, "defaultValue"> {
   height?: string;
   checkedColor?: string;
   checkedHoverColor?: string;
+  checkedActiveColor?: string;
   checkedBorderColor?: string;
   checkedContent?: React.ReactNode;
   uncheckedColor?: string;
   uncheckedHoverColor?: string;
+  uncheckedActiveColor?: string;
   uncheckedBorderColor?: string;
   uncheckedContent?: React.ReactNode;
   onToggle?: (isChecked: boolean) => void;
@@ -23,11 +25,13 @@ export default memo(function ToggleButton({
   height = "2rem",
   checkedColor = colors["pri-1"],
   checkedHoverColor = colors["pri-2"],
+  checkedActiveColor = colors["pri-1"],
   checkedBorderColor = "transparent",
   checkedContent = <span className="text-xs text-bg-1">ON</span>,
   uncheckedColor = colors["bg-2"],
-  uncheckedHoverColor = colors["bg-1"],
-  uncheckedBorderColor = colors["on-bg-3"],
+  uncheckedHoverColor = colors["bg-3"],
+  uncheckedActiveColor = colors["bg-2"],
+  uncheckedBorderColor = colors["border-l2"],
   uncheckedContent = <span className="text-xs">OFF</span>,
   onToggle,
   defaultValue = true,
@@ -41,19 +45,14 @@ export default memo(function ToggleButton({
     if (!style) return;
     style.setProperty("--chekedColor", checkedColor);
     style.setProperty("--checkedHoverColor", checkedHoverColor);
+    style.setProperty("--checkedActiveColor", checkedActiveColor);
     style.setProperty("--checkedBorderColor", checkedBorderColor);
     style.setProperty("--uncheckedColor", uncheckedColor);
     style.setProperty("--uncheckedColor", uncheckedColor);
     style.setProperty("--uncheckedHoverColor", uncheckedHoverColor);
+    style.setProperty("--uncheckedActiveColor", uncheckedActiveColor);
     style.setProperty("--uncheckedBorderColor", uncheckedBorderColor);
-  }, [
-    checkedBorderColor,
-    checkedColor,
-    checkedHoverColor,
-    uncheckedBorderColor,
-    uncheckedColor,
-    uncheckedHoverColor,
-  ]);
+  }, [checkedBorderColor, checkedActiveColor, checkedColor, checkedHoverColor, uncheckedBorderColor, uncheckedActiveColor, uncheckedColor, uncheckedHoverColor]);
 
   useEffect(() => {
     const style = buttonElRef.current?.style;
@@ -71,6 +70,12 @@ export default memo(function ToggleButton({
         : style.getPropertyValue("--uncheckedHoverColor")
     );
     style.setProperty(
+      "--activeColor",
+      isChecked
+        ? style.getPropertyValue("--checkedActiveColor")
+        : style.getPropertyValue("--uncheckedActiveColor")
+    );
+    style.setProperty(
       "--borderColor",
       isChecked
         ? style.getPropertyValue("--checkedBorderColor")
@@ -81,15 +86,13 @@ export default memo(function ToggleButton({
   }, [isChecked]);
 
   const buttonStyleClassName =
-    "bg-[var(--color)] hover:bg-[var(--hoverColor)] border border-[var(--borderColor)] flex justify-center items-center hover:cursor-pointer ";
+    "bg-[var(--color)] hover:bg-[var(--hoverColor)] active:bg-[var(--activeColor)] outline outline-1 outline-[var(--borderColor)] flex justify-center items-center hover:cursor-pointer ";
 
   return (
     <div
       ref={buttonElRef}
       className={
-        `rounded-md box-border select-none ` +
-        buttonStyleClassName +
-        className
+        `rounded-1 box-border select-none ` + buttonStyleClassName + className
       }
       style={{
         width,

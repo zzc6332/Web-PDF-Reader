@@ -1,10 +1,10 @@
 import PDFReader from "./components/PDFReader/PDFReader";
 import useThemes from "./hooks/useThemes";
 import { colorsList } from "./configs/theme";
-import useGlobalStore from "./stores/useGlobalStore";
+import useThemeStore from "./stores/useThemeStore";
 
 function App() {
-  const themeIndex = useGlobalStore((s) => s.themeIndex);
+  const themeIndex = useThemeStore((s) => s.themeIndex);
   useThemes(colorsList, themeIndex);
   return (
     <div className="h-screen">

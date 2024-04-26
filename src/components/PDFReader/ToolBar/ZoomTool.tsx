@@ -176,7 +176,6 @@ export default memo(function ZoomTool({
     const newSliderValue = scaleToSlider(viewScale);
     if (Math.abs(sliderValue - newSliderValue) >= sliderStep) {
       setSliderValueSafely(newSliderValue);
-      console.log("sliderValue: ", newSliderValue);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewScale]);
@@ -298,7 +297,7 @@ export default memo(function ZoomTool({
         }}
       >
         <Slider
-          className="w-20 max-sm:hidden lg:w-60 md:w-40 sm:w-20"
+          className="w-20 select-none max-sm:hidden lg:w-60 md:w-40 sm:w-20"
           value={sliderValue}
           max={sliderMaxValue}
           min={sliderMinValue}
@@ -322,7 +321,7 @@ export default memo(function ZoomTool({
           commitScaleOnClick();
         }}
       ></Icon>
-      <div>
+      <div className="select-none">
         <AutoComplete
           className="ml-2 w-22"
           value={autoCompleteValue}

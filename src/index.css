@@ -7,7 +7,7 @@ body {
 }
 
 /* 当 svg 使用了 fill=currentColor 时，要保证 svg 及其子节点，以及它们 fill 的颜色来源的元素最多只有一个可以被选中，否则在 chrome 下会出现 bug */
-#root *:not(svg, svg *) {
+#root *:not(svg, svg *, .semi-input) {
   transition-property: color, background-color, border-color;
   transition-duration: var(--transition-duration);
   transition-timing-function: ease-in;
