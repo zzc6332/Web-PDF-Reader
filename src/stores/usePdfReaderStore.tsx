@@ -69,7 +69,12 @@ const layoutState = {
 
 interface EventHandlers {
   cancelRender: [];
-  setViewScale: [number, number, number | undefined, number | undefined];
+  setViewScale: [
+    number,
+    number,
+    number | null | undefined,
+    number | null | undefined
+  ];
 }
 
 type Emitter = {
@@ -100,8 +105,8 @@ type ScaleActions = {
   setScale: (scale: number) => void;
   setViewScale: (
     viewScale: number,
-    scaleOriginLeft?: number,
-    scaleOriginTop?: number
+    scaleOriginLeft?: number | null,
+    scaleOriginTop?: number | null
   ) => void;
   getNewScroll: (
     preViewScale: number,
@@ -120,20 +125,25 @@ type ScaleActions = {
     newScrollLeft: number;
   };
   mapScale: (scaleInApp: number) => number;
-  commitScale: () => void;
+  commitScale: (scale?: number) => void;
   getActualScale: () => number;
   getActualViewScale: () => number;
   getSafeScaleValue: (n: number) => number;
 };
 
+interface PageNumOptions {
+  force?: boolean;
+}
+
 type PageNumActions = {
-  handlePageNumChange: (num: number) => void;
-  setCurrentPageNum: (num: number) => void;
-  offsetCurrentPageNum: (num: number) => void;
+  getDistanceByPageNum: (pageNum: number, options?: PageNumOptions) => number;
+  handlePageNumChange: (num: number, options?: PageNumOptions) => void;
+  setCurrentPageNum: (num: number, options?: PageNumOptions) => void;
+  offsetCurrentPageNum: (num: number, options?: PageNumOptions) => void;
   updateCurrentPageNum: () => void;
   getPageNumAndPageOffsetByDistance: (
     docScrollY: number,
-    actualViewScalr: number
+    actualViewScale: number
   ) => {
     pageNum: number;
     pageOffset: number;
@@ -142,6 +152,7 @@ type PageNumActions = {
 
 type LayoutActions = {
   updateScroll: (e: React.UIEvent<HTMLDivElement, UIEvent>) => void;
+  getScaleToFitClient: (isWidth: boolean) => number | undefined;
 };
 
 //#endregion
@@ -312,19 +323,24 @@ const usePdfReaderStore = create<
 
       mapScale: (scaleInApp: number) => scaleInApp * get().scaleMappingRatio,
 
-      // commitSCale 将当前的 viewScale 提交给 scale
-      commitScale: () => {
-        if (get().scale === get().viewScale) {
+      /**
+       * commitSCale 将当前的 viewScale 或指定值提交给 scale
+       * @param scale 如果提供了 scale，那么就会用其代替当前 viewScale 作为渲染 scale
+       * @returns
+       */
+      commitScale: (scale) => {
+        const newScale = scale || get().viewScale;
+        if (newScale === get().scale) {
           return;
         } else if (get().isRendering) {
           get().emitter.emit("cancelRender");
           get().setIsRendering(false);
           setTimeout(() => {
-            get().commitScale();
+            get().commitScale(scale);
           });
           return;
         }
-        get().setScale(get().viewScale);
+        get().setScale(newScale);
         get().setIsRendering(true);
       },
 
@@ -340,40 +356,71 @@ const usePdfReaderStore = create<
 
       //#region - pageNumActions
 
-      handlePageNumChange: (num) => {
+      /**
+       * getDistanceByPageNum 用于查询指定页码距离文档顶部的距离
+       * @param pageNum 要查询的页码
+       */
+      getDistanceByPageNum: (pageNum) => {
+        const pages = get().pages;
+        let distance = 0;
+        for (let i = 1; i <= pageNum; i++) {
+          if (i >= 2) {
+            distance += Math.floor(
+              pages[i - 2].getViewport({ scale: get().getActualViewScale() })
+                .height + parseSize(get().padding)
+            );
+          }
+        }
+        return distance;
+      },
+
+      /**
+       * handlePageNumChange 用于切换当前页码，并控制 documentContainer 的滚动条跳转
+       * @param num 要切换的页码数
+       * @param options 可选配置项
+       * - force：如果为 true，则无论当前页码是多少，都强制跳转（重置滚动条）；否则只有当前页码与 num 不同时才会跳转；默认为 false
+       * @returns
+       */
+      handlePageNumChange: (num, options) => {
+        const force = options?.force;
         const pdfDocument = get().pdfDocument;
         const documentContainer = get().documentContainer;
         if (!pdfDocument || !documentContainer) return;
         const targetPageNum = Math.min(num, pdfDocument.numPages);
-        if (targetPageNum === get().currentPageNum) return;
-        const pages = get().pages;
-        let docScrollY = 0;
-        for (let i = 1; i <= targetPageNum; i++) {
-          if (i > 1) {
-            docScrollY +=
-              Math.floor(
-                pages[i - 2].getViewport({
-                  scale: get().getActualViewScale(),
-                }).height
-              ) + parseSize(get().padding);
-          } else {
-            docScrollY = 0;
-          }
-        }
-        documentContainer.scrollTop = docScrollY;
+        if (targetPageNum === get().currentPageNum && !force) return;
+        documentContainer.scrollTop = get().getDistanceByPageNum(targetPageNum);
       },
-      setCurrentPageNum: (num) => {
+      /**
+       * setCurrentPageNum 用于设置当前页码，并且会将输入值转换为合法的页码数，将其传递给 handlePageNumChange 调用
+       * @param num
+       * @param options
+       * @returns
+       */
+      setCurrentPageNum: (num, options) => {
         set({ isHandlingPageNumChange: true });
         let newNum = Math.abs(Math.round(num));
         if (newNum < 1) newNum = 1;
         const pageCount = get().pdfDocument?.numPages;
         if (!pageCount) return;
         if (pageCount && newNum > pageCount) newNum = pageCount;
-        get().handlePageNumChange(newNum);
+        get().handlePageNumChange(newNum, options);
         set({ currentPageNum: newNum });
         set({ currentTopPageNum: newNum });
       },
-      offsetCurrentPageNum: (num) => {
+      /**
+       * offsetCurrentPageNum 用于偏移当前的页码
+       * @param num 可以是正负数或 0，如果是 0，则默认会重置当前滚动条到当且页的初始状态
+       * @param options
+       * @returns
+       */
+      offsetCurrentPageNum: (num, options) => {
+        if (num === 0) {
+          const _options = { ...options };
+          // 如果 options.force 没有被指定，则将其指定为 true，强制执行页面跳转
+          _options.force = options?.force === false ? false : true;
+          get().handlePageNumChange(get().currentPageNum, _options);
+          return;
+        }
         const newNum = get().currentPageNum + Math.round(num);
         get().setCurrentPageNum(newNum);
       },
@@ -404,7 +451,6 @@ const usePdfReaderStore = create<
         // 如果还有下一页，则根据当前页和下一页在当前视图中的大小比较来决定展示页码与基准页码的关系
         if (pages[currentTopPageNum] && pages[currentTopPageNum - 1]) {
           const page = pages[currentTopPageNum - 1];
-          // console.log("currentTopPageNum: ", currentTopPageNum);
           const nextPage = pages[currentTopPageNum];
           const pageHeight = Math.floor(
             page.getViewport({ scale: get().getActualViewScale() }).height
@@ -478,6 +524,24 @@ const usePdfReaderStore = create<
           scrollX: el.scrollLeft,
           scrollY: el.scrollTop,
         });
+      },
+
+      getScaleToFitClient: (isWidth) => {
+        const documentContainer = get().documentContainer;
+        if (!documentContainer) return;
+        // 获取当前 page 的原始尺寸
+        const viewport = get().pages[get().currentPageNum - 1].getViewport({
+          scale: 1,
+        });
+        const originalSize = isWidth ? viewport.width : viewport.height;
+        // 计算出当前 page 相对于应用中 100% 时的尺寸
+        const standardSize = originalSize * get().scaleMappingRatio;
+        // 获取当前视口的尺寸 - 这里使用了 clientWidth 和 offsetHeight，因为较多场景下适应宽度后存在竖向滚动条，适应高度后不存在横向滚动条
+        const clientSize = isWidth
+          ? documentContainer.clientWidth
+          : documentContainer.offsetHeight;
+        // 计算填满当前视口尺寸需要的 scale
+        return clientSize / (standardSize + parseSize(get().padding) * 2);
       },
 
       //#endregion

@@ -8,7 +8,7 @@ import Path from "path";
 
 import { pathToFileURL } from "url";
 
-import pkg from "sass";
+import * as pkg from "sass";
 import { platform } from "os";
 const { compileString, Logger } = pkg;
 

@@ -83,29 +83,29 @@ export default memo(function ZoomTool({
   const viewScaleRange = usePdfReaderStore((s) => s.viewScaleRange);
   const getSafeScaleValue = usePdfReaderStore((s) => s.getSafeScaleValue);
 
-  const commitScaleImmediately = () => {
+  const commitScaleImmediately = (scale?: number) => {
     commitScaleOnClick.cancel();
     commitScaleOnDrag.cancel();
     // 为了确保调用 commitScale 时，viewScale 已更新，因此将其异步调用
     Promise.resolve().then(() => {
-      commitScale();
+      commitScale(scale);
     });
     // console.log("0");
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const commitScaleOnClick = useCallback(
-    debounce(() => {
+    debounce((scale?: number) => {
       commitScaleOnDrag.cancel();
-      commitScale();
+      commitScale(scale);
       // console.log("200");
     }, 200),
     []
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const commitScaleOnDrag = useCallback(
-    debounce(() => {
+    debounce((scale?: number) => {
       commitScaleOnClick.cancel();
-      commitScale();
+      commitScale(scale);
       // console.log("500");
     }, 500),
     []
@@ -169,7 +169,7 @@ export default memo(function ZoomTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sliderValue]);
 
-  // 如果 viewScale 发生了变化 ，sliderValue 也同步改变
+  // 如果 viewScale 发生了变化，sliderValue 也同步改变
   useEffect(() => {
     // 初始化完成后才开始同步
     if (!isSliderValueInitialed) return;
@@ -253,12 +253,17 @@ export default memo(function ZoomTool({
     const sliderValue = scaleToSlider(scaleValue);
     setSliderValueSafely(sliderValue);
     commitScaleImmediately();
-    // 为了避免一些情况下 AutoCompletetValue 没有更新，此处手动更新一下
+    // 为了避免一些情况下 autoCompletetValue 没有更新，此处手动更新一下
     setAutoCompletetValue(numToPercentage(scaleValue));
   }
 
   // AutoComplete 中输入内容时弹出下拉列表
   const zoomOptions = ["原始大小", "适应宽度", "适应高度"];
+
+  // 选中下拉列表内容
+  const getScaleToFitClient = usePdfReaderStore((s) => s.getScaleToFitClient);
+  const offsetCurrentPageNum = usePdfReaderStore((s) => s.offsetCurrentPageNum);
+
   function handleAutoCompleteSearch(value: string) {
     setAutoCompletetValue(value + "");
   }
@@ -266,8 +271,28 @@ export default memo(function ZoomTool({
     switch (value) {
       case "原始大小":
         setAutoCompletetValue("100%");
-        setSliderValueSafely(scaleToSlider(1));
+        // setSliderValueSafely(scaleToSlider(1));
+        setViewScale(1);
         commitScaleImmediately();
+        break;
+      case "适应宽度":
+        {
+          const scale = getScaleToFitClient(true);
+          if (!scale) break;
+          setAutoCompletetValue(numToPercentage(scale));
+          setViewScale(scale);
+          commitScaleImmediately();
+        }
+        break;
+      case "适应高度":
+        {
+          const scale = getScaleToFitClient(false);
+          if (!scale) break;
+          setAutoCompletetValue(numToPercentage(scale));
+          offsetCurrentPageNum(0);
+          setViewScale(scale, null, 0);
+          commitScaleImmediately();
+        }
         break;
     }
   }

@@ -243,13 +243,20 @@ export default memo(function DocumentContainer({
     const onSetViewScale = (
       scrollLeft: number,
       scrollTop: number,
-      _scaleOriginLeft = clientWidth / 2,
-      _scaleOriginTop = clientHeight / 2
+      _scaleOriginLeft?: number | null,
+      _scaleOriginTop?: number | null
     ) => {
       preScrollLeft = scrollLeft;
       preScrollTop = scrollTop;
-      scaleOriginLeft = _scaleOriginLeft;
-      scaleOriginTop = _scaleOriginTop;
+
+      scaleOriginLeft =
+        typeof _scaleOriginLeft === "number"
+          ? _scaleOriginLeft
+          : clientWidth / 2;
+      scaleOriginTop =
+        typeof _scaleOriginTop === "number"
+          ? _scaleOriginTop
+          : clientHeight / 2;
     };
     pdfReaderEmitter.on("setViewScale", onSetViewScale);
 
@@ -336,6 +343,7 @@ export default memo(function DocumentContainer({
     });
   };
 
+  // crtl + 鼠标滚轮触发缩放
   useEffect(() => {
     const documentContainer = documentContainerRef.current!;
 
@@ -365,16 +373,50 @@ export default memo(function DocumentContainer({
       }
     };
 
+    // 让 body 获得焦点，否则在鼠标点击浏览器前无法触发 keyup 事件
     document.body.dispatchEvent(new MouseEvent("click"));
 
     window.addEventListener("keyup", onCtrlKeyUp);
 
-    documentContainer.addEventListener("touchstart", (e) => {
-      console.log(e);
-    });
-
     return () => {
       documentContainer.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keyup", onCtrlKeyUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 方向键触发换页
+  const offsetCurrentPageNum = usePdfReaderStore((s) => s.offsetCurrentPageNum);
+  const isDocumentContainerFocusedRef = useRef(false);
+  useEffect(() => {
+    const documentContainer = documentContainerRef.current!;
+
+    const onDocumentContainerFocus = () => {
+      isDocumentContainerFocusedRef.current = true;
+    };
+    documentContainer.addEventListener("focus", onDocumentContainerFocus);
+
+    const onDocumentContainerBlur = () => {
+      isDocumentContainerFocusedRef.current = false;
+    };
+    documentContainer.addEventListener("blur", onDocumentContainerBlur);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        !isDocumentContainerFocusedRef.current ||
+        (e.key !== "ArrowRight" && e.key !== "ArrowLeft") ||
+        (documentContainer.scrollWidth > documentContainer.clientWidth &&
+          !e.ctrlKey)
+      )
+        return;
+      offsetCurrentPageNum(e.key === "ArrowRight" ? 1 : -1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      documentContainer.removeEventListener("focus", onDocumentContainerFocus);
+      documentContainer.removeEventListener("blur", onDocumentContainerBlur);
+      window.removeEventListener("keydown", onKeyDown);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -384,8 +426,10 @@ export default memo(function DocumentContainer({
   return (
     <div
       className={
-        "relative size-full overflow-auto bg-bg-3 box-border" + className
+        "relative size-full overflow-auto bg-bg-3 box-border focus:outline-none" +
+        className
       }
+      tabIndex={0}
       onScroll={(e) => {
         updateCurrentPageNum();
         if (enableRecordScrollRef.current) updateScroll(e);
