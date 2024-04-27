@@ -4,6 +4,7 @@ import usePdfReaderStore from "src/stores/usePdfReaderStore";
 import { debounce, throttle } from "lodash-es";
 import usePagesRender from "src/hooks/pdfReaderHooks/usePagesRender";
 import useReactiveRef from "src/hooks/useReactiveRef";
+import EventListenerContainer from "@/utils/EventListenerContainer";
 
 interface DocumentContainerProps extends Props {}
 
@@ -197,7 +198,7 @@ export default memo(function DocumentContainer({
 
   //#endregion
 
-  //#region - 控制组件行为
+  //#region - 控制 scroll
 
   // * 页面刷新时 store 会从 sessionStorage 中读取 scrollX 和 scrollY，将它们应用到 documentContainer 上
   const scrollX = usePdfReaderStore((s) => s.scrollX);
@@ -343,11 +344,38 @@ export default memo(function DocumentContainer({
     });
   };
 
-  // crtl + 鼠标滚轮触发缩放
+  const offsetCurrentPageNum = usePdfReaderStore((s) => s.offsetCurrentPageNum);
+
+  // * 记录 documentContainer 的聚焦状态
+  const isDocumentContainerFocusedRef = useRef(false);
+
+  // * 控制事件监听
   useEffect(() => {
     const documentContainer = documentContainerRef.current!;
 
-    const onWheel = (e: WheelEvent) => {
+    const elc = new EventListenerContainer();
+
+    //#region - 控制 documentContainer 的聚焦状态
+
+    elc.add(documentContainer, "focus", () => {
+      isDocumentContainerFocusedRef.current = true;
+    });
+
+    elc.add(documentContainer, "blur", () => {
+      isDocumentContainerFocusedRef.current = true;
+    });
+
+    // 初始化时先使得 documentContainer 变为 focused 状态
+    documentContainer.focus();
+
+    //#endregion
+
+    //#region - crtl + 鼠标滚轮触发缩放
+
+    elc.add(documentContainer, "wheel", (e) => {
+      // 在 documentContainer 上发生 wheel 事件时也会使得它 focused
+      documentContainer.focus();
+
       if (e.ctrlKey === true) {
         const documentContainerDomRect =
           documentContainer.getBoundingClientRect();
@@ -362,46 +390,20 @@ export default memo(function DocumentContainer({
         setViewScale(newViewScale, scaleOriginX, scaleOriginY);
         commitScaleDelay();
       }
-    };
-    documentContainer.addEventListener("wheel", onWheel, {
-      passive: false,
     });
 
-    const onCtrlKeyUp = (e: KeyboardEvent) => {
+    elc.add(documentContainer, "keyup", (e) => {
       if (e.key === "Control") {
+        console.log(111);
         commitScaleImmediately();
       }
-    };
+    });
 
-    // 让 body 获得焦点，否则在鼠标点击浏览器前无法触发 keyup 事件
-    document.body.dispatchEvent(new MouseEvent("click"));
+    //#endregion
 
-    window.addEventListener("keyup", onCtrlKeyUp);
+    //#region - 方向键触发换页
 
-    return () => {
-      documentContainer.removeEventListener("wheel", onWheel);
-      window.removeEventListener("keyup", onCtrlKeyUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 方向键触发换页
-  const offsetCurrentPageNum = usePdfReaderStore((s) => s.offsetCurrentPageNum);
-  const isDocumentContainerFocusedRef = useRef(false);
-  useEffect(() => {
-    const documentContainer = documentContainerRef.current!;
-
-    const onDocumentContainerFocus = () => {
-      isDocumentContainerFocusedRef.current = true;
-    };
-    documentContainer.addEventListener("focus", onDocumentContainerFocus);
-
-    const onDocumentContainerBlur = () => {
-      isDocumentContainerFocusedRef.current = false;
-    };
-    documentContainer.addEventListener("blur", onDocumentContainerBlur);
-
-    const onKeyDown = (e: KeyboardEvent) => {
+    elc.add(documentContainer, "keydown", (e) => {
       if (
         !isDocumentContainerFocusedRef.current ||
         (e.key !== "ArrowRight" && e.key !== "ArrowLeft") ||
@@ -410,13 +412,12 @@ export default memo(function DocumentContainer({
       )
         return;
       offsetCurrentPageNum(e.key === "ArrowRight" ? 1 : -1);
-    };
-    window.addEventListener("keydown", onKeyDown);
+    });
+
+    //#endregion
 
     return () => {
-      documentContainer.removeEventListener("focus", onDocumentContainerFocus);
-      documentContainer.removeEventListener("blur", onDocumentContainerBlur);
-      window.removeEventListener("keydown", onKeyDown);
+      elc.removeAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
