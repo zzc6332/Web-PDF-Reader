@@ -41,7 +41,6 @@ export default class EventListenerContainer {
     const remover = () => {
       target.removeEventListener(type, listener as EventListener, _options);
       this._removers.delete(remover);
-      console.log("移除事件");
     };
 
     this._removers.add(remover);

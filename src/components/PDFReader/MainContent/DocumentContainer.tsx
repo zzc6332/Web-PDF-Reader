@@ -234,12 +234,13 @@ export default memo(function DocumentContainer({
     const documentContainer = documentContainerRef.current;
     if (!pagesViewsContainer || !documentContainer) return;
 
-    const { clientWidth, clientHeight } = documentContainer;
+    // const { clientWidth, clientHeight } = documentContainer;
     let preViewScale = viewScale;
-    let preScrollLeft: number;
-    let preScrollTop: number;
-    let scaleOriginLeft: number;
-    let scaleOriginTop: number;
+    let preScrollLeft = 0;
+    let preScrollTop = 0;
+    let scaleOriginLeft = 0;
+    let scaleOriginTop = 0;
+    let { devicePixelRatio } = window;
 
     const onSetViewScale = (
       scrollLeft: number,
@@ -247,6 +248,8 @@ export default memo(function DocumentContainer({
       _scaleOriginLeft?: number | null,
       _scaleOriginTop?: number | null
     ) => {
+      const { clientWidth, clientHeight } = documentContainer;
+
       preScrollLeft = scrollLeft;
       preScrollTop = scrollTop;
 
@@ -278,10 +281,16 @@ export default memo(function DocumentContainer({
     // 监视 pagesViewsContainer 的尺寸变化，得到新的 scroll 值
     const observer = new ResizeObserver((entries) => {
       if (!enableScrollOnScaleRef.current) return;
+      if (window.devicePixelRatio !== devicePixelRatio) {
+        devicePixelRatio = window.devicePixelRatio;
+        return;
+      }
       for (const entry of entries) {
         const borderBoxSize = entry.borderBoxSize[0];
         const scrollWidth = borderBoxSize.inlineSize;
         const scrollHeight = borderBoxSize.blockSize;
+
+        const { clientWidth, clientHeight } = documentContainer;
 
         const { newScrollTop, newScrollLeft } = getNewScroll(
           preViewScale,
@@ -365,7 +374,6 @@ export default memo(function DocumentContainer({
       isDocumentContainerFocusedRef.current = true;
     });
 
-    // 初始化时先使得 documentContainer 变为 focused 状态
     documentContainer.focus();
 
     //#endregion
@@ -394,7 +402,6 @@ export default memo(function DocumentContainer({
 
     elc.add(documentContainer, "keyup", (e) => {
       if (e.key === "Control") {
-        console.log(111);
         commitScaleImmediately();
       }
     });
