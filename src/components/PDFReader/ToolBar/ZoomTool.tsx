@@ -82,9 +82,9 @@ export default memo(function ZoomTool({
     commitScaleOnClick.cancel();
     commitScaleOnDrag.cancel();
     // 为了确保调用 commitScale 时，viewScale 已更新，因此将其异步调用
-    Promise.resolve().then(() => {
+    setTimeout(() => {
       commitScale(scale);
-    });
+    })
     // console.log("0");
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps

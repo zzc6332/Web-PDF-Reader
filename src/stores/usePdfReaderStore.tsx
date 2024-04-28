@@ -40,7 +40,7 @@ const renderState = {
   pages: [] as PDFPageProxy[],
   loadingTask: null as PDFDocumentLoadingTask | null,
   isRendering: false,
-  pdfPath: "http://192.168.6.2:8080/2", // ***** 临时
+  pdfPath: "http://192.168.6.2:8080/5", // ***** 临时
 };
 
 const scaleState = {

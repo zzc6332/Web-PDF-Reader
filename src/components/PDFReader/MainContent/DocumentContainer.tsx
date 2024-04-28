@@ -117,11 +117,16 @@ export default memo(function DocumentContainer({
 
   // * 定义最小的渲染 scale（对于 pdfjs 而言），避免页面过于缩小后突然放大导致画 面过于模糊
   const minRenderScale = 1;
+  // * 定义最小的渲染 scale （对于 pdfjs 而言），避免渲染图像过大导致卡顿
+  const maxRenderScale = 5;
 
-  // & 开启 pages 渲染
+  // * 开启 pages 渲染
   const [canvasEls, renderTasks] = usePagesRender(pages, {
-    scale: Math.max(actualScale, minRenderScale),
+    scale: Math.min(Math.max(actualScale, minRenderScale), maxRenderScale),
   });
+
+  // * canvasElsRef 用来存储当前 DOM 中的每个 canvasEl 的即时引用，以防止出现更新 scale 时新的 canvas 还在渲染（仍未放入 dom 中），此时如果用户进行新的缩放操作时 dom 中的 canvas 无法被改变的情况
+  const canvasElsRef = useRef<(HTMLCanvasElement | undefined)[]>([]);
 
   // * 对于 chrome 等一些浏览器，当 actualViewScale 小于 minRenderScale 时，一些场景下（比如当滚动条拉到底部时）在 viewScale 变小时会出现 pageViewsContainer 的尺寸变化不引起浏览器重排的情况，需要设法触发浏览器的重排。
   useEffect(() => {
@@ -141,11 +146,18 @@ export default memo(function DocumentContainer({
   // * 当 viewScale 与渲染 scale 不同时，为 canvasEl 设置缩放，使其匹配 viewScale
   useEffect(() => {
     canvasEls.forEach((canvasEl) => {
+      canvasEl.style.setProperty("position", "absolute");
       canvasEl.style.setProperty(
         "transform",
         `scale(${actualViewScale / +canvasEl.dataset.scale!})`
       );
-      canvasEl.style.setProperty("position", "absolute");
+    });
+    // 以防此时 dom 上还存在旧的 canvas，从 canvasElsRef 中将 dom 中的 canvas 也处理一遍
+    canvasElsRef.current.forEach((canvasEl) => {
+      canvasEl?.style.setProperty(
+        "transform",
+        `scale(${actualViewScale / +canvasEl.dataset.scale!})`
+      );
     });
     // viewScale 作为依赖是由于更改 viewScale 时，函数节流会使得当前 viewScale 与 canvas 的渲染 scale 不匹配，直到新的 canvas 被创建
     // canvasEls 作为依赖是由于当 avtualViewScale 小于一定值时，当前 viewScale 与 canvas 的渲染 scale 始终不匹配，如果 canvas 是在这样的情况下被创建的，则也需要为其匹配 viewScale
@@ -155,7 +167,7 @@ export default memo(function DocumentContainer({
   const setIsRendering = usePdfReaderStore((s) => s.setIsRendering);
   const renderCompletionsRef = useRef<boolean[]>([]);
 
-  // * 每当有新的 renderTask，则将新的 canvas 放到 dom 中
+  // * 每当有新的 renderTask，则在合适的时间将新的 canvas 放到 dom 中
   useEffect(() => {
     if (renderTasks.length > 0) {
       setIsRendering(true);
@@ -167,13 +179,19 @@ export default memo(function DocumentContainer({
       let isFirstLoad = false;
       if (!canvasContainerEl?.children.length) {
         canvasContainerEl?.replaceChildren(canvasEl);
+        // 向 canvasElsRef 中注册当前 dom 中的的 canvasEl
+        canvasElsRef.current[index] = canvasEl;
         isFirstLoad = true;
       }
       renderTask.promise
         .then(() => {
           // 如果是初次渲染，canvas 会在渲染完成前就添加到 dom 中，渲染完成时就不需要再次添加
-          if (!isFirstLoad)
+          if (!isFirstLoad) {
             canvasContainerEl?.replaceChildren(canvasEl);
+            // 向 canvasElsRef 中注册当前 dom 中的的 canvasEl
+            canvasElsRef.current[index] = canvasEl;
+          }
+          // console.log(`第 ${index + 1} 页渲染完成`);
         })
         .catch(() => {
           // console.log("renderTask 取消");
@@ -186,6 +204,8 @@ export default memo(function DocumentContainer({
       .then(() => {
         // console.log("所有 page 渲染完成");
         setIsRendering(false);
+        // 如果更换了 pdfDocument，则将 canvasElsRef 中多余的页数去除
+        canvasElsRef.current.length = canvasEls.length;
       })
       .catch(() => {
         // console.log("渲染中断");
@@ -357,8 +377,7 @@ export default memo(function DocumentContainer({
   );
 
   const commitScaleImmediately = () => {
-    commitScaleDelay.cancel();
-    Promise.resolve().then(() => {
+    setTimeout(() => {
       commitScale();
     });
   };
