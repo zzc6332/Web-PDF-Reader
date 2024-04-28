@@ -56,14 +56,14 @@ export default memo(function DocumentContainer({
     (s) => s.specifyDocumentContainer
   );
 
-  const resetInitialState = usePdfReaderStore((s) => s.resetInitialState);
+  const resetDomState = usePdfReaderStore((s) => s.resetDomState);
 
   // * 将 documentContainer 元素传给 store 管理，使得 store 中可以实时获得容器的 scroll 等信息
   useEffect(() => {
     specifyDocumentContainer(documentContainerRef.current);
     return () => {
       // 离开组件时对 store 中的一些 state 进行重置
-      resetInitialState();
+      resetDomState();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -155,16 +155,25 @@ export default memo(function DocumentContainer({
   const setIsRendering = usePdfReaderStore((s) => s.setIsRendering);
   const renderCompletionsRef = useRef<boolean[]>([]);
 
-  // * 如果渲染完成前触发了新的渲染，则取消当前渲染任务
+  // * 每当有新的 renderTask，则将新的 canvas 放到 dom 中
   useEffect(() => {
     if (renderTasks.length > 0) {
       setIsRendering(true);
     }
     renderTasks.forEach((renderTask, index) => {
       const canvasEl = canvasEls[index];
+      const canvasContainerEl = canvasContainerElsRef.current[index];
+      // 如果当前 canvasContainerEl 中还没有 canvas 元素（即初次渲染时），则先将 canvas 立即添加到 dom 中，这样可以提前显示已经渲染的内容，以提升用户体验；否则如果是修改 scale 引起的渲染，需要等渲染完成时再替换 canvas，防止出现闪烁
+      let isFirstLoad = false;
+      if (!canvasContainerEl?.children.length) {
+        canvasContainerEl?.replaceChildren(canvasEl);
+        isFirstLoad = true;
+      }
       renderTask.promise
         .then(() => {
-          canvasContainerElsRef.current[index]?.replaceChildren(canvasEl);
+          // 如果是初次渲染，canvas 会在渲染完成前就添加到 dom 中，渲染完成时就不需要再次添加
+          if (!isFirstLoad)
+            canvasContainerEl?.replaceChildren(canvasEl);
         })
         .catch(() => {
           // console.log("renderTask 取消");
@@ -182,6 +191,7 @@ export default memo(function DocumentContainer({
         // console.log("渲染中断");
       });
 
+    // 如果渲染完成前触发了新的渲染，则取消当前渲染任务
     const onCancelRender = () => {
       renderTasks.forEach((renderTask) => {
         renderTask.cancel();
@@ -393,7 +403,7 @@ export default memo(function DocumentContainer({
         const scaleOriginX = clientX - x;
         const scaleOriginY = clientY - y;
         const newViewScale = getSafeScaleValue(
-          viewScaleRef.current - e.deltaY * 0.01 * 0.01 * 12.5
+          viewScaleRef.current - e.deltaY * 0.01 * 0.01 * 25
         );
         setViewScale(newViewScale, scaleOriginX, scaleOriginY);
         commitScaleDelay();
@@ -434,7 +444,7 @@ export default memo(function DocumentContainer({
   return (
     <div
       className={
-        "relative size-full overflow-auto bg-bg-3 box-border focus:outline-none" +
+        "relative size-full overflow-auto bg-bg-3 box-border focus:outline-none " +
         className
       }
       tabIndex={0}

@@ -17,6 +17,7 @@ interface ToggleButtonProps extends Omit<Props, "defaultValue"> {
   uncheckedContent?: React.ReactNode;
   onToggle?: (isChecked: boolean) => void;
   defaultValue?: boolean;
+  value?: boolean;
 }
 
 export default memo(function ToggleButton({
@@ -24,7 +25,7 @@ export default memo(function ToggleButton({
   width = "2rem",
   height = "2rem",
   checkedColor = colors["pri-1"],
-  checkedHoverColor = colors["pri-2"],
+  checkedHoverColor = colors["pri-0"],
   checkedActiveColor = colors["pri-1"],
   checkedBorderColor = "transparent",
   checkedContent = <span className="text-xs text-bg-1">ON</span>,
@@ -35,9 +36,14 @@ export default memo(function ToggleButton({
   uncheckedContent = <span className="text-xs">OFF</span>,
   onToggle,
   defaultValue = true,
+  value,
 }: ToggleButtonProps) {
   const className = classNameProp || "";
-  const [isChecked, setIsChecked] = useState(defaultValue);
+  const [isChecked, setIsChecked] = useState(
+    value === undefined ? defaultValue : value
+  );
+
+  const [isInitialed, setIsInitialed] = useState(false);
 
   const buttonElRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -52,7 +58,16 @@ export default memo(function ToggleButton({
     style.setProperty("--uncheckedHoverColor", uncheckedHoverColor);
     style.setProperty("--uncheckedActiveColor", uncheckedActiveColor);
     style.setProperty("--uncheckedBorderColor", uncheckedBorderColor);
-  }, [checkedBorderColor, checkedActiveColor, checkedColor, checkedHoverColor, uncheckedBorderColor, uncheckedActiveColor, uncheckedColor, uncheckedHoverColor]);
+  }, [
+    checkedBorderColor,
+    checkedActiveColor,
+    checkedColor,
+    checkedHoverColor,
+    uncheckedBorderColor,
+    uncheckedActiveColor,
+    uncheckedColor,
+    uncheckedHoverColor,
+  ]);
 
   useEffect(() => {
     const style = buttonElRef.current?.style;
@@ -81,7 +96,11 @@ export default memo(function ToggleButton({
         ? style.getPropertyValue("--checkedBorderColor")
         : style.getPropertyValue("--uncheckedBorderColor")
     );
-    if (onToggle) onToggle(isChecked);
+    if (onToggle && isInitialed) {
+      onToggle(isChecked);
+    } else {
+      setIsInitialed(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChecked]);
 

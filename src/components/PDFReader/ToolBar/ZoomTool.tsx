@@ -15,11 +15,6 @@ interface ZoomToolsProps extends Props {
 
 //#region - Slider 相关静态参数和工具函数
 
-// SliderValue 的范围
-// const sliderMinValue = 0;
-// const sliderMaxValue = 15;
-// const sliderValueRange = [sliderMinValue, sliderMaxValue];
-
 // sliderStep 是 Slider 组件的步长
 const sliderStep = 0.1;
 
@@ -148,7 +143,7 @@ export default memo(function ZoomTool({
   //#endregion
 
   // sliderValue 是受控组件 Slider 上的 value，确保只通过 setSliderValueSafely 来修改它的值，使得它的范围永远符合预期
-  const [sliderValue, setSliderValue] = useState(3);
+  const [sliderValue, setSliderValue] = useState(scaleToSlider(scale));
 
   // 组件刚加载时获取初始的 sliderValue
   const [isSliderValueInitialed, setIsSliderValueInitialed] = useState(false);

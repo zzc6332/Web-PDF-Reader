@@ -10,5 +10,5 @@ body {
 #root *:not(svg, svg *, .semi-input) {
   transition-property: color, background-color, border-color;
   transition-duration: var(--transition-duration);
-  transition-timing-function: ease-in;
+  transition-timing-function: ease-out;
 }

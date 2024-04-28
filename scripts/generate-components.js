@@ -1,9 +1,11 @@
+// 命令示例：node generate-components Foo1 Foo2 p=src/components/Foo Bar1 Bar2 p=src/components/Bar
+
 // const path = require("path");
 // const fs = require("fs");
 // const readline = require("readline").promises;
 import path from "path";
 import fs from "fs";
-import readline from 'readline/promises'
+import readline from "readline/promises";
 
 const { argv } = process;
 

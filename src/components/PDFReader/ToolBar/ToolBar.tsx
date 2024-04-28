@@ -6,6 +6,7 @@ import ToggleButton from "src/components/GlobalComponents/ToggleButton";
 import Props from "src/types/props";
 import { colors } from "src/configs/theme";
 import useThemeStore from "src/stores/useThemeStore";
+import usePdfReaderStore from "src/stores/usePdfReaderStore";
 
 const iconProps: Omit<IconProps, "type"> = {
   padding: "0.25rem",
@@ -22,6 +23,9 @@ export default memo(function ToolBar(props: ToolBarProps) {
   const setThemeIndex = useThemeStore((s) => s.setThemeIndex);
   const themeIndex = useThemeStore((s) => s.themeIndex);
   const setSemiTheme = useThemeStore((s) => s.setSemiTheme);
+  const setIsThumbsVisible = usePdfReaderStore((s) => s.setIsThumbsVisible);
+  const isThumbsVisible = usePdfReaderStore((s) => s.isThumbsVisible);
+
   return (
     <div
       className={"relative h-12 w-full bg-bg-2 z-1 outline-l1 " + className}
@@ -40,7 +44,10 @@ export default memo(function ToolBar(props: ToolBarProps) {
           uncheckedContent={
             <Icon type="#icon-pages" size="1.25rem" color={colors["on-bg-2"]} />
           }
-          onToggle={() => {}}
+          value={isThumbsVisible}
+          onToggle={(isChecked) => {
+            setIsThumbsVisible(isChecked);
+          }}
         />
       </div>
       {/* 中间工具栏 */}

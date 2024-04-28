@@ -1,11 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 
 export default function useThemes(
   colorsList: { [key: string]: string[] },
   themeIndex: number
 ) {
   const { style } = document.documentElement;
-  const isMounted = useRef(false);
+
+  const [isMounted, setIsmounted] = useState(false);
+
   useEffect(() => {
     for (const colorName in colorsList) {
       const item = colorsList[colorName];
@@ -13,15 +15,23 @@ export default function useThemes(
       const colorValue = item[themeIndex];
       style.setProperty(cssVariableName, colorValue, "important");
     }
-    if (isMounted.current) {
+    if (isMounted) {
+      // 切换主题时和平时使用不同的过渡时间
       style.setProperty("--transition-duration", "600ms");
       setTimeout(() => {
         style.setProperty("--transition-duration", "100ms");
       }, 1000);
     } else {
-      style.setProperty("--transition-duration", "100ms");
-      isMounted.current = true;
+      // 初始阶段不设置颜色过渡，否则一些动态颜色样式加载时也会有过渡
+      style.setProperty("--transition-duration", "0");
+      setIsmounted(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [themeIndex]);
+
+  // 样式加载完毕后开始使用过渡
+  useEffect(() => {
+    if (isMounted) style.setProperty("--transition-duration", "100ms");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMounted]);
 }

@@ -14,7 +14,13 @@ module.exports = {
     "plugin:react/jsx-runtime",
     "@unocss",
   ],
-  ignorePatterns: ["dist", ".eslintrc.cjs", "node_modules", "src/assets/**/*"],
+  ignorePatterns: [
+    "dist",
+    ".eslintrc.cjs",
+    "node_modules",
+    "src/assets/**/*",
+    "scripts/**/*",
+  ],
   parser: "@typescript-eslint/parser",
   plugins: ["react-refresh", "react-hooks"],
   rules: {

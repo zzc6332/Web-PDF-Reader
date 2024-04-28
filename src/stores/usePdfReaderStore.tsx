@@ -31,7 +31,7 @@ function parseSize(size: string) {
 
 //#region - 定义初始 state
 
-const initialState = {
+const domState = {
   documentContainer: null as HTMLDivElement | null,
 };
 
@@ -47,7 +47,7 @@ const scaleState = {
   scale: 1,
   viewScale: 1,
   scaleMappingRatio: 4 / 3,
-  viewScaleRange: [0.25, 4],
+  viewScaleRange: [0.25, 10],
 };
 
 const pageNumState = {
@@ -63,9 +63,15 @@ const layoutState = {
   scrollY: 0,
 };
 
+const thumbsState = {
+  isThumbsVisible: true,
+};
+
 //#endregion
 
 //#region - 定义 state、 actions 和 EventEmitter 类型
+
+//#region - 定义 EventEmitter 和 state 类型
 
 interface EventHandlers {
   cancelRender: [];
@@ -81,14 +87,19 @@ type Emitter = {
   emitter: EventEmitter<EventHandlers>;
 };
 
-type InitialState = typeof initialState;
+type DomState = typeof domState;
 type RenderState = typeof renderState;
 type ScaleState = typeof scaleState;
 type PageNumState = typeof pageNumState;
 type LayoutState = typeof layoutState;
+type ThumbsState = typeof thumbsState;
+
+//#endregion
+
+//#region - 定义 actions 类型
 
 type ResetStateActions = {
-  resetInitialState: () => void;
+  resetDomState: () => void;
   resetRenderState: () => void;
   resetScaleState: () => void;
   resetPageNumState: () => void;
@@ -131,6 +142,10 @@ type ScaleActions = {
   getSafeScaleValue: (n: number) => number;
 };
 
+type ThumbsActions = {
+  setIsThumbsVisible: (isThumbsVisible: boolean) => void;
+};
+
 interface PageNumOptions {
   force?: boolean;
 }
@@ -157,34 +172,40 @@ type LayoutActions = {
 
 //#endregion
 
+//#endregion
+
 //#region - 创建 store
 
 const usePdfReaderStore = create<
   Emitter &
-    InitialState &
-    RenderState &
-    ScaleState &
-    PageNumState &
-    LayoutState &
     ResetStateActions &
+    DomState &
+    RenderState &
     RenderActions &
+    ScaleState &
     ScaleActions &
+    PageNumState &
     PageNumActions &
-    LayoutActions
+    LayoutState &
+    LayoutActions &
+    ThumbsState &
+    ThumbsActions
 >()(
   persist(
     (set, get) => ({
       emitter: new EventEmitter<EventHandlers>(),
-      ...initialState,
+      ...domState,
       ...renderState,
       ...scaleState,
       ...pageNumState,
       ...layoutState,
+      ...thumbsState,
+
       //#region - 定义 actions
 
       //#region - resetStateActions
-      resetInitialState: () => {
-        set(initialState);
+      resetDomState: () => {
+        set(domState);
       },
       resetRenderState: () => {
         set(renderState);
@@ -214,7 +235,9 @@ const usePdfReaderStore = create<
       // useLoading 用于获取 pages，pdfDocument，loadingTask
       useLoading: () => {
         const [loadingTask, pdfDocument, pages] = usePdfLoading(get().pdfPath);
-        set({ loadingTask });
+        useEffect(() => {
+          set({ loadingTask });
+        }, [loadingTask]);
         useEffect(() => {
           if (pdfDocument) set({ pdfDocument });
         }, [pdfDocument]);
@@ -546,14 +569,20 @@ const usePdfReaderStore = create<
 
       //#endregion
 
+      //#region - thumbsActions
+      setIsThumbsVisible: (isThumbsVisible) => {
+        set({ isThumbsVisible });
+      },
+      //#endregion
+
       //#endregion
     }),
     {
       name: "pdf-state",
       storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => {
-        const { scale, scrollX, scrollY } = state;
-        return { scale, scrollX, scrollY };
+        const { scale, scrollX, scrollY, isThumbsVisible } = state;
+        return { scale, scrollX, scrollY, isThumbsVisible };
       },
     }
   )
