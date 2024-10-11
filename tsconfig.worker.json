@@ -1,21 +1,21 @@
 {
   "compilerOptions": {
+    "composite": true,
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": [
       "ES2020",
-      "DOM",
-      "DOM.Iterable"
+      "WebWorker",
+      "WebWorker.ImportScripts",
+      "Webworker.Iterable"
     ],
     "module": "ESNext",
     "skipLibCheck": true,
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
+    // "noEmit": true,
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
@@ -24,19 +24,13 @@
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "src/*"
+        "src/workers/*"
       ]
     }
   },
   "include": [
-    "src"
-  ],
-  "references": [
-    {
-      "path": "./tsconfig.node.json",
-    },
-    {
-      "path": "./tsconfig.worker.json"
-    }
+    "src/workers/pdf.worker.ts",
+    "src/worker-handler/worker.ts/",
+    "src/vite-env.d.ts",
   ]
 }

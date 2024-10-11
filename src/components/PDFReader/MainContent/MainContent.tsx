@@ -11,8 +11,12 @@ export default memo(function MainContent({
 }: DocumentLoadingProps) {
   const className = classNameProp || "";
 
-  const useLoading = usePdfReaderStore((s) => s.useLoading);
-  useLoading();
+  // * del
+  // const useLoading = usePdfReaderStore((s) => s.useLoading);
+  // useLoading();
+
+  const loadWorkerProxies = usePdfReaderStore((s) => s.loadWorkerProxies);
+  loadWorkerProxies();
 
   // sideSheetEl 是一个侧边栏，可以控制它的显示与隐藏，其唯一直接子元素是 thumbnailsContainer
   const sideSheetElRef = useRef<HTMLDivElement>(null);

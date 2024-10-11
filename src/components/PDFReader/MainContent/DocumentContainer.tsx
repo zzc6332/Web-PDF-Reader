@@ -2,9 +2,10 @@ import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import Props from "src/types/props";
 import usePdfReaderStore from "src/stores/usePdfReaderStore";
 import { debounce, throttle } from "lodash-es";
-import usePagesRender from "src/hooks/pdfReaderHooks/usePagesRender";
 import useReactiveRef from "src/hooks/useReactiveRef";
 import EventListenerContainer from "@/utils/EventListenerContainer";
+// import { WorkerProxy } from "worker-handler";
+import { CarrierProxy, pdfWorker } from "../../../workers/pdf.main";
 
 interface DocumentContainerProps extends Props {}
 
@@ -15,19 +16,21 @@ export default memo(function DocumentContainer({
 
   //#region - 组件中通用数据
 
-  const pdfDocument = usePdfReaderStore((s) => s.pdfDocument);
+  const renderPages = usePdfReaderStore((s) => s.renderPages);
   const pages = usePdfReaderStore((s) => s.pages);
+  const pagesWP = usePdfReaderStore((s) => s.pagesWP);
   const padding = usePdfReaderStore((s) => s.padding);
   const scale = usePdfReaderStore((s) => s.scale);
   const viewScale = usePdfReaderStore((s) => s.viewScale);
   const setViewScale = usePdfReaderStore((s) => s.setViewScale);
-  const getActualScale = usePdfReaderStore((s) => s.getActualScale);
+  const getFinalScale = usePdfReaderStore((s) => s.getFinalScale);
   const getActualViewScale = usePdfReaderStore((s) => s.getActualViewScale);
   const scaleMappingRatio = usePdfReaderStore((s) => s.scaleMappingRatio);
   const pdfReaderEmitter = usePdfReaderStore((s) => s.emitter);
+  const minRenderScale = usePdfReaderStore((s) => s.minRenderScale);
 
-  const actualScale = useMemo(
-    () => getActualScale(),
+  const finalScale = useMemo(
+    () => getFinalScale(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scale, scaleMappingRatio]
   );
@@ -43,8 +46,6 @@ export default memo(function DocumentContainer({
   //#region - 一些为了防止闭包陷阱而创建的 refs，通常在各种回调中使用
 
   const viewScaleRef = useReactiveRef(viewScale);
-  const pagesRef = useReactiveRef(pages);
-  const pdfDocumentRef = useReactiveRef(pdfDocument);
 
   //#endregion
 
@@ -74,6 +75,10 @@ export default memo(function DocumentContainer({
 
   const pageViewsContainerRef = useRef<HTMLDivElement>(null);
   const canvasContainerElsRef = useRef<(HTMLDivElement | null)[]>([]);
+  // * canvasElsRef 用来存储当前 DOM 中的每个 canvasEl 的即时引用，以防止出现更新 scale 时新的 canvas 还在渲染（仍未放入 dom 中），此时如果用户进行新的缩放操作时 dom 中的 canvas 无法被改变的情况
+  const canvasElsRef = useRef<(HTMLCanvasElement | undefined)[]>([]);
+  // * newCanvasElsRef 用来存储当前正在渲染中的 canvasEl
+  const newCanvasElsRef = useRef<(HTMLCanvasElement | undefined)[]>([]);
 
   const pageViews = (
     <div
@@ -82,8 +87,8 @@ export default memo(function DocumentContainer({
       style={{ padding: `calc(${padding}/2)` }}
     >
       {pages.map((page, pageIndex) => {
-        const viewport = page.getViewport({ scale: actualViewScale });
-        const { width, height } = viewport;
+        const width = page.width * actualViewScale;
+        const height = page.height * actualViewScale;
         return (
           // 最外层的 container，用于设置 padding、padding
           <div
@@ -115,18 +120,86 @@ export default memo(function DocumentContainer({
     </div>
   );
 
-  // * 定义最小的渲染 scale（对于 pdfjs 而言），避免页面过于缩小后突然放大导致画 面过于模糊
-  const minRenderScale = 1;
-  // * 定义最小的渲染 scale （对于 pdfjs 而言），避免渲染图像过大导致卡顿
-  const maxRenderScale = 5;
-
   // * 开启 pages 渲染
-  const [canvasEls, renderTasks] = usePagesRender(pages, {
-    scale: Math.min(Math.max(actualScale, minRenderScale), maxRenderScale),
-  });
+  useEffect(() => {
+    if (!pagesWP) return;
 
-  // * canvasElsRef 用来存储当前 DOM 中的每个 canvasEl 的即时引用，以防止出现更新 scale 时新的 canvas 还在渲染（仍未放入 dom 中），此时如果用户进行新的缩放操作时 dom 中的 canvas 无法被改变的情况
-  const canvasElsRef = useRef<(HTMLCanvasElement | undefined)[]>([]);
+    const canvasEls: HTMLCanvasElement[] = [];
+    // const renderTaskWPPromiseList: Promise<WorkerProxy<RenderTask>>[] = [];
+    const scale = finalScale;
+
+    pages.forEach((page, index) => {
+      // 创建 canvas 元素，为其设置属性，并使用自定义属性标记它的初始 scale
+      const canvasEl = document.createElement("canvas");
+      canvasEl.style.setProperty("position", "absolute");
+      canvasEl.setAttribute("data-scale", scale + "");
+      canvasEl.setAttribute("width", page.width * scale + "");
+      canvasEl.setAttribute("height", page.height * scale + "");
+      canvasEl.style.setProperty("transform-origin", "top left");
+      canvasEls[index] = canvasEl;
+
+      newCanvasElsRef.current[index] = canvasEl;
+      canvasEl?.style.setProperty(
+        "transform",
+        `scale(${actualViewScale / +canvasEl.dataset.scale!})`
+      );
+
+      // 将 canvaEl 放入 DOM 中
+      const canvasContainerEl = canvasContainerElsRef.current[index];
+      const containerLength = canvasContainerEl?.children.length;
+      if (containerLength === 0) {
+        canvasContainerEl!.append(canvasEl);
+        // 向 canvasElsRef 中注册当前的 canvasEl（canvasElsRef 中存放的是当前的 canvasEl 或上一次的还残留在 DOM 中的 canvasEl，当新的 canvasEl 准备好了时就会将其替换）
+        canvasElsRef.current[index] = canvasEl;
+      }
+    });
+
+    // 开启渲染任务
+    const renderTasksWPPromise = renderPages(
+      canvasEls.map((canvasEl) => canvasEl.transferControlToOffscreen()),
+      pagesWP!,
+      {
+        scale,
+      }
+    );
+
+    // 渲染完成后的处理
+    renderTasksWPPromise.then(async (renderTasksWP) => {
+      const onCancelRender = async () => {
+        pdfReaderEmitter.off("cancelRender", onCancelRender);
+        await pdfWorker.execute("cancelRenders", [], renderTasksWP).promise;
+        // });
+      };
+      pdfReaderEmitter.on("cancelRender", onCancelRender);
+
+      renderTasksWP.forEach(async (renderTaskWP, index) => {
+        const canvasEl = canvasEls[index];
+        const canvasContainerEl = canvasContainerElsRef.current[index];
+        await renderTaskWP.promise;
+        // console.log("第 " + (index + 1) + " 页渲染完成");
+        canvasContainerEl?.replaceChildren(canvasEl);
+        canvasElsRef.current[index] = canvasEl;
+      });
+
+      const renderTaskPromises: CarrierProxy<Promise<void>>[] = [];
+      for await (const renderTaskWP of renderTasksWP) {
+        renderTaskPromises.push(renderTaskWP.promise);
+      }
+      if (renderTaskPromises.length > 0) {
+        Promise.all(renderTaskPromises)
+          .then(() => {
+            // console.log("所有 page 渲染完成");
+            pdfReaderEmitter.off("cancelRender", onCancelRender);
+            setIsRendering(false);
+            // 如果更换了 pdfDocument，则将 canvasElsRef 中多余的页数去除
+            canvasElsRef.current.length = newCanvasElsRef.current.length;
+          })
+          .catch(() => {});
+      }
+    });
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages, scale]);
 
   // * 对于 chrome 等一些浏览器，当 actualViewScale 小于 minRenderScale 时，一些场景下（比如当滚动条拉到底部时）在 viewScale 变小时会出现 pageViewsContainer 的尺寸变化不引起浏览器重排的情况，需要设法触发浏览器的重排。
   useEffect(() => {
@@ -145,9 +218,8 @@ export default memo(function DocumentContainer({
 
   // * 当 viewScale 与渲染 scale 不同时，为 canvasEl 设置缩放，使其匹配 viewScale
   useEffect(() => {
-    canvasEls.forEach((canvasEl) => {
-      canvasEl.style.setProperty("position", "absolute");
-      canvasEl.style.setProperty(
+    newCanvasElsRef.current.forEach((canvasEl) => {
+      canvasEl?.style.setProperty(
         "transform",
         `scale(${actualViewScale / +canvasEl.dataset.scale!})`
       );
@@ -162,69 +234,9 @@ export default memo(function DocumentContainer({
     // viewScale 作为依赖是由于更改 viewScale 时，函数节流会使得当前 viewScale 与 canvas 的渲染 scale 不匹配，直到新的 canvas 被创建
     // canvasEls 作为依赖是由于当 avtualViewScale 小于一定值时，当前 viewScale 与 canvas 的渲染 scale 始终不匹配，如果 canvas 是在这样的情况下被创建的，则也需要为其匹配 viewScale
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasEls, viewScale]);
+  }, [viewScale]);
 
   const setIsRendering = usePdfReaderStore((s) => s.setIsRendering);
-  const renderCompletionsRef = useRef<boolean[]>([]);
-
-  // * 每当有新的 renderTask，则在合适的时间将新的 canvas 放到 dom 中
-  useEffect(() => {
-    if (renderTasks.length > 0) {
-      setIsRendering(true);
-    }
-    renderTasks.forEach((renderTask, index) => {
-      const canvasEl = canvasEls[index];
-      const canvasContainerEl = canvasContainerElsRef.current[index];
-      // 如果当前 canvasContainerEl 中还没有 canvas 元素（即初次渲染时），则先将 canvas 立即添加到 dom 中，这样可以提前显示已经渲染的内容，以提升用户体验；否则如果是修改 scale 引起的渲染，需要等渲染完成时再替换 canvas，防止出现闪烁
-      let isFirstLoad = false;
-      if (!canvasContainerEl?.children.length) {
-        canvasContainerEl?.replaceChildren(canvasEl);
-        // 向 canvasElsRef 中注册当前 dom 中的的 canvasEl
-        canvasElsRef.current[index] = canvasEl;
-        isFirstLoad = true;
-      }
-      renderTask.promise
-        .then(() => {
-          // 如果是初次渲染，canvas 会在渲染完成前就添加到 dom 中，渲染完成时就不需要再次添加
-          if (!isFirstLoad) {
-            canvasContainerEl?.replaceChildren(canvasEl);
-            // 向 canvasElsRef 中注册当前 dom 中的的 canvasEl
-            canvasElsRef.current[index] = canvasEl;
-          }
-          // console.log(`第 ${index + 1} 页渲染完成`);
-        })
-        .catch(() => {
-          // console.log("renderTask 取消");
-        });
-    });
-    const renderTasksPromises = renderTasks.map(
-      (renderTask) => renderTask.promise
-    );
-    Promise.all(renderTasksPromises)
-      .then(() => {
-        // console.log("所有 page 渲染完成");
-        setIsRendering(false);
-        // 如果更换了 pdfDocument，则将 canvasElsRef 中多余的页数去除
-        canvasElsRef.current.length = canvasEls.length;
-      })
-      .catch(() => {
-        // console.log("渲染中断");
-      });
-
-    // 如果渲染完成前触发了新的渲染，则取消当前渲染任务
-    const onCancelRender = () => {
-      renderTasks.forEach((renderTask) => {
-        renderTask.cancel();
-      });
-    };
-    pdfReaderEmitter.on("cancelRender", onCancelRender);
-
-    return () => {
-      renderCompletionsRef.current = [];
-      pdfReaderEmitter.off("cancelRender", onCancelRender);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasEls, renderTasks]);
 
   //#endregion
 
@@ -239,8 +251,10 @@ export default memo(function DocumentContainer({
     const documentContainer = documentContainerRef.current;
     const pageViewsContainer = pageViewsContainerRef.current;
     if (!documentContainer || !pageViewsContainer) return;
+    const { scrollHeight } = documentContainer;
     const observer = new ResizeObserver((_, observer) => {
-      if (pagesRef.current.length !== pdfDocumentRef.current?.numPages) return;
+      // 确定 scrollHeight 发生过变化了再改变滚动条位置
+      if (scrollHeight === documentContainer.scrollHeight) return;
       documentContainer!.scrollLeft = scrollX;
       documentContainer!.scrollTop = scrollY;
       enableRecordScrollRef.current = true;
@@ -350,7 +364,7 @@ export default memo(function DocumentContainer({
       initialObserver.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfDocument]);
+  }, []);
 
   //#endregion
 
@@ -422,7 +436,7 @@ export default memo(function DocumentContainer({
         const scaleOriginX = clientX - x;
         const scaleOriginY = clientY - y;
         const newViewScale = getSafeScaleValue(
-          viewScaleRef.current - e.deltaY * 0.01 * 0.01 * 25
+          viewScaleRef.current - e.deltaY * 0.01 * 0.01 * 10
         );
         setViewScale(newViewScale, scaleOriginX, scaleOriginY);
         commitScaleDelay();

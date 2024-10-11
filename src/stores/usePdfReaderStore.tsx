@@ -2,14 +2,13 @@ import {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
   PDFPageProxy,
+  RenderTask,
 } from "pdfjs-dist";
 import { create } from "zustand";
-import usePdfLoading from "../hooks/pdfReaderHooks/usePdfLoading";
-import { useEffect } from "react";
-
 import { EventEmitter } from "events";
-
 import { persist, createJSONStorage } from "zustand/middleware";
+import { pdfWorker, WorkerProxy } from "../workers/pdf.main";
+import { GetViewportParameters } from "pdfjs-dist/types/src/display/api";
 
 //#region - 工具函数
 
@@ -36,18 +35,32 @@ const domState = {
 };
 
 const renderState = {
-  pdfDocument: null as PDFDocumentProxy | null,
-  pages: [] as PDFPageProxy[],
-  loadingTask: null as PDFDocumentLoadingTask | null,
-  isRendering: false,
-  pdfPath: "http://192.168.6.2:8080/5", // ***** 临时
+  pages: [] as {
+    width: number;
+    height: number;
+    proxy: WorkerProxy<PDFPageProxy>;
+  }[],
+  isRendering: true,
+  // pdfPath: "http://localhost:5173/statics/profile.pdf", // ***** 临时
+  pdfPath: "http://localhost:5173/statics/5.pdf", // ***** 临时
+};
+
+const workerState = {
+  pagesWP: null as WorkerProxy<PDFPageProxy[]> | null,
+  pdfDocumentWP: null as WorkerProxy<PDFDocumentProxy> | null,
+  loadingTaskWP: null as WorkerProxy<PDFDocumentLoadingTask> | null,
+  renderTasksWP: null as WorkerProxy<RenderTask[]> | null,
 };
 
 const scaleState = {
   scale: 1,
   viewScale: 1,
   scaleMappingRatio: 4 / 3,
-  viewScaleRange: [0.25, 10],
+  viewScaleRange: [0.25, 3],
+  // 定义最小的渲染 scale（对于 pdfjs 而言），避免页面过于缩小后突然放大导致画 面过于模糊
+  minRenderScale: 1,
+  // 定义最大的渲染 scale （对于 pdfjs 而言），避免渲染图像过大导致卡顿
+  maxRenderScale: 5,
 };
 
 const pageNumState = {
@@ -93,6 +106,7 @@ type ScaleState = typeof scaleState;
 type PageNumState = typeof pageNumState;
 type LayoutState = typeof layoutState;
 type ThumbsState = typeof thumbsState;
+type WorkerState = typeof workerState;
 
 //#endregion
 
@@ -104,11 +118,20 @@ type ResetStateActions = {
   resetScaleState: () => void;
   resetPageNumState: () => void;
   resetLayoutState: () => void;
+  resetWorkerState: () => void;
+};
+
+type WorkerActions = {
+  loadWorkerProxies: () => Promise<void>;
+  renderPages: (
+    offscreenCanvasList: OffscreenCanvas[],
+    pagesWPList: WorkerProxy<PDFPageProxy[]>,
+    getViewportParameters: GetViewportParameters
+  ) => Promise<WorkerProxy<RenderTask[]>>;
 };
 
 type RenderActions = {
   specifyDocumentContainer: (documentContainer: HTMLDivElement | null) => void;
-  useLoading: () => void;
   setIsRendering: (bool: boolean) => void;
 };
 
@@ -138,6 +161,7 @@ type ScaleActions = {
   mapScale: (scaleInApp: number) => number;
   commitScale: (scale?: number) => void;
   getActualScale: () => number;
+  getFinalScale: () => number;
   getActualViewScale: () => number;
   getSafeScaleValue: (n: number) => number;
 };
@@ -189,7 +213,9 @@ const usePdfReaderStore = create<
     LayoutState &
     LayoutActions &
     ThumbsState &
-    ThumbsActions
+    ThumbsActions &
+    WorkerState &
+    WorkerActions
 >()(
   persist(
     (set, get) => ({
@@ -200,6 +226,7 @@ const usePdfReaderStore = create<
       ...pageNumState,
       ...layoutState,
       ...thumbsState,
+      ...workerState,
 
       //#region - 定义 actions
 
@@ -219,6 +246,56 @@ const usePdfReaderStore = create<
       resetLayoutState: () => {
         set(pageNumState);
       },
+      resetWorkerState: () => {
+        set(workerState);
+      },
+      //#endregion
+
+      //#region - WorkerActions
+
+      loadWorkerProxies: async () => {
+        const { data } = await pdfWorker.execute("load", [], get().pdfPath)
+          .promise;
+        const loadingTaskWP = await data.pdfDocumentLoadingTask;
+        const pdfDocumentWP = await data.pdfDocumentProxy;
+        const pagesWP = await data.pdfPageProxies;
+        // 设置 WorkerState 中的状态
+        set({
+          loadingTaskWP,
+          pdfDocumentWP,
+          pagesWP,
+        });
+        // 将一些状态同步到主线程中
+        const pages = [];
+        for await (const pageWP of pagesWP) {
+          const viewPort = await pageWP.getViewport({
+            scale: 1,
+          });
+          const page = {
+            width: await viewPort.width,
+            height: await viewPort.height,
+            proxy: pageWP,
+          };
+          pages.push(page);
+        }
+        set({ pages });
+      },
+
+      renderPages: async (
+        offscreenCanvasList: OffscreenCanvas[],
+        pagesWPList: WorkerProxy<PDFPageProxy[]>,
+        getViewportParameters: GetViewportParameters
+      ) => {
+        const { data: renderTasksWP } = await pdfWorker.execute(
+          "renderPages",
+          [...offscreenCanvasList],
+          offscreenCanvasList,
+          pagesWPList,
+          getViewportParameters
+        ).promise;
+        set({ renderTasksWP });
+        return renderTasksWP;
+      },
       //#endregion
 
       //#region - initialActions
@@ -231,20 +308,6 @@ const usePdfReaderStore = create<
       //#endregion
 
       //#region - renderActions
-
-      // useLoading 用于获取 pages，pdfDocument，loadingTask
-      useLoading: () => {
-        const [loadingTask, pdfDocument, pages] = usePdfLoading(get().pdfPath);
-        useEffect(() => {
-          set({ loadingTask });
-        }, [loadingTask]);
-        useEffect(() => {
-          if (pdfDocument) set({ pdfDocument });
-        }, [pdfDocument]);
-        useEffect(() => {
-          set({ pages });
-        }, [pages]);
-      },
 
       setIsRendering: (bool) => {
         set({ isRendering: bool });
@@ -360,7 +423,7 @@ const usePdfReaderStore = create<
           get().setIsRendering(false);
           setTimeout(() => {
             get().commitScale(scale);
-          });
+          }, 100);
           return;
         }
         get().setScale(newScale);
@@ -370,6 +433,12 @@ const usePdfReaderStore = create<
       // 获取转换后的用于 PdfJS 内部的 scale
       getActualScale: () => get().mapScale(get().scale),
       getActualViewScale: () => get().mapScale(get().viewScale),
+      // 获取最终传给 PdfJs 内部的 scale
+      getFinalScale: () =>
+        Math.min(
+          Math.max(get().getActualScale(), get().minRenderScale),
+          get().maxRenderScale
+        ),
 
       // 将接收的值限定到合法的 scale 值的范围中
       getSafeScaleValue: (n) =>
@@ -389,8 +458,8 @@ const usePdfReaderStore = create<
         for (let i = 1; i <= pageNum; i++) {
           if (i >= 2) {
             distance += Math.floor(
-              pages[i - 2].getViewport({ scale: get().getActualViewScale() })
-                .height + parseSize(get().padding)
+              pages[i - 2].height * get().getActualViewScale() +
+                parseSize(get().padding)
             );
           }
         }
@@ -406,10 +475,9 @@ const usePdfReaderStore = create<
        */
       handlePageNumChange: (num, options) => {
         const force = options?.force;
-        const pdfDocument = get().pdfDocument;
         const documentContainer = get().documentContainer;
-        if (!pdfDocument || !documentContainer) return;
-        const targetPageNum = Math.min(num, pdfDocument.numPages);
+        if (!documentContainer) return;
+        const targetPageNum = Math.min(num, get().pages.length);
         if (targetPageNum === get().currentPageNum && !force) return;
         documentContainer.scrollTop = get().getDistanceByPageNum(targetPageNum);
       },
@@ -423,7 +491,7 @@ const usePdfReaderStore = create<
         set({ isHandlingPageNumChange: true });
         let newNum = Math.abs(Math.round(num));
         if (newNum < 1) newNum = 1;
-        const pageCount = get().pdfDocument?.numPages;
+        const pageCount = get().pages.length;
         if (!pageCount) return;
         if (pageCount && newNum > pageCount) newNum = pageCount;
         get().handlePageNumChange(newNum, options);
@@ -476,10 +544,10 @@ const usePdfReaderStore = create<
           const page = pages[currentTopPageNum - 1];
           const nextPage = pages[currentTopPageNum];
           const pageHeight = Math.floor(
-            page.getViewport({ scale: get().getActualViewScale() }).height
+            page.height * get().getActualViewScale()
           );
           const nextPageHeight = Math.floor(
-            nextPage.getViewport({ scale: get().getActualViewScale() }).height
+            nextPage.height * get().getActualViewScale()
           );
           // currentPageHeightInView 和 nextPageHeightInView 表示页在视图中显示的高度
           const currentPageHeightInView = pageHeight - currentPageScrollY;
@@ -524,9 +592,7 @@ const usePdfReaderStore = create<
         const pages = get().pages;
         for (let i = 1; i <= pages.length; i++) {
           const page = pages[i - 1];
-          const pageHeight = Math.floor(
-            page.getViewport({ scale: actualViewScale }).height
-          );
+          const pageHeight = Math.floor(page.height * actualViewScale);
           if (pageOffset >= pageHeight + padding) {
             pageOffset -= pageHeight + padding;
           } else {
@@ -553,10 +619,8 @@ const usePdfReaderStore = create<
         const documentContainer = get().documentContainer;
         if (!documentContainer) return;
         // 获取当前 page 的原始尺寸
-        const viewport = get().pages[get().currentPageNum - 1].getViewport({
-          scale: 1,
-        });
-        const originalSize = isWidth ? viewport.width : viewport.height;
+        const { width, height } = get().pages[get().currentPageNum - 1];
+        const originalSize = isWidth ? width : height;
         // 计算出当前 page 相对于应用中 100% 时的尺寸
         const standardSize = originalSize * get().scaleMappingRatio;
         // 获取当前视口的尺寸 - 这里使用了 clientWidth 和 offsetHeight，因为较多场景下适应宽度后存在竖向滚动条，适应高度后不存在横向滚动条

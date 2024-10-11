@@ -11,6 +11,17 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
   },
+  build: {
+    rollupOptions: {
+      output: {
+        format: "es",
+      },
+    },
+  },
+  worker: {
+    format: "es",
+  },
+  assetsInclude: ["./statics/*"],
   plugins: [
     UnoCSS({
       configFile: "./uno.config.ts",

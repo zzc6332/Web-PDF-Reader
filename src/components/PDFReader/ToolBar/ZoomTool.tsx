@@ -84,7 +84,7 @@ export default memo(function ZoomTool({
     // 为了确保调用 commitScale 时，viewScale 已更新，因此将其异步调用
     setTimeout(() => {
       commitScale(scale);
-    })
+    });
     // console.log("0");
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -348,7 +348,9 @@ export default memo(function ZoomTool({
           data={zoomOptions}
           onSearch={handleAutoCompleteSearch}
           onChange={handleAutoCompleteChange}
-          onBlur={handleAutoCompleteCommit}
+          onBlur={() => {
+            setAutoCompletetValue(numToPercentage(scale));
+          }}
           onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
             if (e.key === "Enter") {
               handleAutoCompleteCommit();
