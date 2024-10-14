@@ -11,10 +11,6 @@ export default memo(function MainContent({
 }: DocumentLoadingProps) {
   const className = classNameProp || "";
 
-  // * del
-  // const useLoading = usePdfReaderStore((s) => s.useLoading);
-  // useLoading();
-
   const loadWorkerProxies = usePdfReaderStore((s) => s.loadWorkerProxies);
   loadWorkerProxies();
 
@@ -46,7 +42,7 @@ export default memo(function MainContent({
     <div className={"flex" + " " + className}>
       <div
         ref={sideSheetElRef}
-        className="flex-none transition-width"
+        className="flex-none transition-width resize-x overflow-auto"
         style={{
           transition: "width ease-out 180ms",
         }}

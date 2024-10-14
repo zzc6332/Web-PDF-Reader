@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "src/App.tsx";
 import "uno.css";
 import "./index.css";
-import "src/globals/globals";
+import "src/globals/index";
 import "./assets/icons/icons.js";
 import "@unocss/reset/tailwind-compat.css";
 
@@ -15,6 +15,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 
 window.onload = () => {
   document.addEventListener("gesturestart", (e) => {
-    console.log(e)
+    console.log(e);
   });
-}
+};

@@ -17,7 +17,10 @@ const ThumbnailsContainer = memo(
             "w-64 min-w-64 bg-slate-500 border-amber border-[5px] h-full text-light"
           }
         >
-          qwertyuiopasdfghjklzxcvbnm
+          hii
+          <div className="resize-x b-black b-solid b-1 overflow-auto">
+            asddas
+          </div>
         </div>
       );
     }

@@ -52,9 +52,13 @@ function createDocumentInitParameters(
 }
 //#endregion
 
+// pdf 读取相关的数据都是一次一批地更新
 let pdfDocumentLoadingTask: PDFDocumentLoadingTask | null = null;
 let pdfDocumentProxy: PDFDocumentProxy | null = null;
 let pdfPageProxies: PDFPageProxy[];
+
+// renderTask 不是一次性产生的，所以要将所有产生的 renderTask 都集中放置在一起，当渲染完成或渲染取消时将其移除
+const currentRenderTasks = new Set<RenderTask>();
 
 export type PdfWorkerActions = {
   init: (
@@ -67,12 +71,13 @@ export type PdfWorkerActions = {
     pdfDocumentProxy: PDFDocumentProxy;
     pdfPageProxies: PDFPageProxy[];
   }>;
+
   renderPages: (
-    canvasList: OffscreenCanvas[],
-    pages: PDFPageProxy[],
+    pageSizeMap: Map<number, [number, number]>,
+    pageNums: number[],
     getViewportParameters: GetViewportParameters
-  ) => ActionResult<RenderTask[]>;
-  cancelRenders: (renderTasks: RenderTask[]) => ActionResult<void>;
+  ) => ActionResult<[number, boolean, ImageBitmap | null]>;
+  cancelRenders: () => ActionResult<void>;
 };
 
 onmessage = createOnmessage<PdfWorkerActions>({
@@ -110,28 +115,57 @@ onmessage = createOnmessage<PdfWorkerActions>({
     };
   },
 
-  async renderPages(canvasList, pages, getViewportParameters) {
-    const renderTasks = canvasList.map((canvas, index) => {
-      const page = pages[index];
-      // console.log(index, " 开始渲染");
+  async renderPages(pageSizeMap, pageNums, getViewportParameters) {
+    const renderTaskPromises: Promise<void>[] = [];
+
+    // 渲染页面
+    for (const pageNum of pageNums) {
+      const pageIndex = pageNum - 1;
+      const page = pdfPageProxies[pageIndex];
+      const [width, height] = pageSizeMap.get(pageNum)!;
+      const canvas = new OffscreenCanvas(width, height);
       const canvasContext = canvas.getContext("2d");
       const viewport = page.getViewport(getViewportParameters);
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
+      // console.log(pageNum + " 页开始渲染");
       const renderTask = page.render({ canvasContext, viewport });
-      renderTask.promise
-        .then(() => {
-          // console.log(page._pageIndex + 1 + " 渲染完成");
-        })
-        .catch(() => {
-          // console.log(`取消渲染第 ${index + 1} 页`, err);
-        });
-      return renderTask;
-    });
-    return renderTasks;
+      currentRenderTasks.add(renderTask);
+      const renderTaskPromise = renderTask.promise;
+      renderTaskPromises.push(renderTaskPromise);
+      try {
+        await renderTaskPromise;
+        // console.log(pageNum + " 页渲染完成");
+        const imageBitmap = canvas.transferToImageBitmap();
+        this.$post([pageNum, true, imageBitmap], [imageBitmap]);
+      } catch (error) {
+        // console.log(`取消渲染第 ${pageNum} 页`, error);
+        this.$post([pageNum, false, null]);
+      }
+      currentRenderTasks.delete(renderTask);
+      // renderTaskPromise
+      //   .then(() => {
+      //     const imageBitmap = canvas.transferToImageBitmap();
+      //     console.log(pageNum + " 页渲染完成");
+      //     this.$post([pageNum, true, imageBitmap], [imageBitmap]);
+      //   })
+      //   .catch((err) => {
+      //     console.log(`取消渲染第 ${pageNum} 页`, err);
+      //     this.$post([pageNum, false, null]);
+      //   })
+      //   .finally(() => {
+      //     currentRenderTasks.delete(renderTask);
+      //   });
+    }
+    Promise.all(renderTaskPromises)
+      .then(() => {
+        this.$end([0, true, null]);
+      })
+      .catch(() => {});
+    setTimeout(() => {
+      // console.log(currentRenderTasks);
+    }, 2000);
   },
-  async cancelRenders(renderTasks: RenderTask[]) {
-    renderTasks.forEach((renderTask) => {
+  async cancelRenders() {
+    currentRenderTasks.forEach((renderTask) => {
       renderTask.cancel();
     });
   },

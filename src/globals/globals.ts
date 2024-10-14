@@ -1,2 +1,0 @@
-import "./pdfjsLib";
-import "./handleConsole";
