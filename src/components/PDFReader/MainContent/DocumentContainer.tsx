@@ -166,19 +166,24 @@ export default memo(function DocumentContainer({
 
           canvasEl.getContext("2d")?.drawImage(imageBitmap!, 0, 0);
 
-          // 需要确保旧的 canvasEl 已经被移除后，再注册新的 canvasEl
-          const observer = new MutationObserver((mutationsList) => {
-            for (const mutation of mutationsList) {
-              mutation.removedNodes.forEach((node) => {
-                if (node === canvasElsRef.current[pageNum - 1]) {
-                  // 向 canvasElsRef 中注册当前的 canvasEl
-                  canvasElsRef.current[pageNum - 1] = canvasEl;
-                }
-              });
-              observer.disconnect();
-            }
-          });
-          observer.observe(canvasContainerEl!, { childList: true });
+          // 除非是第一次渲染，否则需要确保旧的 canvasEl 已经被移除后，再注册新的 canvasEl
+          if (!canvasContainerEl.children.length) {
+            // 向 canvasElsRef 中注册当前的 canvasEl
+            canvasElsRef.current[pageNum - 1] = canvasEl;
+          } else {
+            const observer = new MutationObserver((mutationsList) => {
+              for (const mutation of mutationsList) {
+                mutation.removedNodes.forEach((node) => {
+                  if (node === canvasElsRef.current[pageNum - 1]) {
+                    // 向 canvasElsRef 中注册当前的 canvasEl
+                    canvasElsRef.current[pageNum - 1] = canvasEl;
+                  }
+                });
+                observer.disconnect();
+              }
+            });
+            observer.observe(canvasContainerEl, { childList: true });
+          }
 
           // 更新 DOM
           canvasContainerEl.replaceChildren(canvasEl);
@@ -354,7 +359,6 @@ export default memo(function DocumentContainer({
 
     // 监视 pagesViewsContainer 的尺寸变化，得到新的 scroll 值
     const observer = new ResizeObserver((entries) => {
-      // if (enableRecordPreScrollSizeRef.current) {
       if (!enableScrollOnScaleRef.current) {
         for (const entry of entries) {
           const borderBoxSize = entry.borderBoxSize[0];
@@ -362,65 +366,65 @@ export default memo(function DocumentContainer({
           preScrollHeight = borderBoxSize.blockSize;
         }
         // console.log(preScrollWidth, preScrollHeight);
-      }
+      } else {
+        if (!enableScrollOnScaleRef.current) return;
+        if (window.devicePixelRatio !== devicePixelRatio) {
+          devicePixelRatio = window.devicePixelRatio;
+          return;
+        }
+        for (const entry of entries) {
+          const borderBoxSize = entry.borderBoxSize[0];
+          const scrollWidth = borderBoxSize.inlineSize;
+          const scrollHeight = borderBoxSize.blockSize;
 
-      if (!enableScrollOnScaleRef.current) return;
-      if (window.devicePixelRatio !== devicePixelRatio) {
-        devicePixelRatio = window.devicePixelRatio;
-        return;
-      }
-      for (const entry of entries) {
-        const borderBoxSize = entry.borderBoxSize[0];
-        const scrollWidth = borderBoxSize.inlineSize;
-        const scrollHeight = borderBoxSize.blockSize;
+          const { clientWidth, clientHeight } = documentContainer;
 
-        const { clientWidth, clientHeight } = documentContainer;
+          const { newScrollTop, newScrollLeft } = getNewScroll(
+            preViewScale,
+            preScrollWidth,
+            preScrollHeight,
+            preScrollLeft,
+            preScrollTop,
+            scrollWidth,
+            scrollHeight,
+            scaleOriginLeft,
+            scaleOriginTop,
+            clientWidth,
+            clientHeight
+          );
 
-        const { newScrollTop, newScrollLeft } = getNewScroll(
-          preViewScale,
-          preScrollWidth,
-          preScrollHeight,
-          preScrollLeft,
-          preScrollTop,
-          scrollWidth,
-          scrollHeight,
-          scaleOriginLeft,
-          scaleOriginTop,
-          clientWidth,
-          clientHeight
-        );
+          // console.log(
+          //   "preViewScale: ",
+          //   preViewScale,
+          //   "preScrollWidth: ",
+          //   preScrollWidth,
+          //   "preScrollHeight: ",
+          //   preScrollHeight,
+          //   "preScrollLeft: ",
+          //   preScrollLeft,
+          //   "preScrollTop: ",
+          //   preScrollTop,
+          //   "scrollWidth: ",
+          //   scrollWidth,
+          //   "scrollHeight: ",
+          //   scrollHeight,
+          //   "scaleOriginLeft: ",
+          //   scaleOriginLeft,
+          //   "scaleOriginTop: ",
+          //   scaleOriginTop,
+          //   "clientWidth: ",
+          //   clientWidth,
+          //   "clientHeight: ",
+          //   clientHeight
+          // );
 
-        // console.log(
-        //   "preViewScale: ",
-        //   preViewScale,
-        //   "preScrollWidth: ",
-        //   preScrollWidth,
-        //   "preScrollHeight: ",
-        //   preScrollHeight,
-        //   "preScrollLeft: ",
-        //   preScrollLeft,
-        //   "preScrollTop: ",
-        //   preScrollTop,
-        //   "scrollWidth: ",
-        //   scrollWidth,
-        //   "scrollHeight: ",
-        //   scrollHeight,
-        //   "scaleOriginLeft: ",
-        //   scaleOriginLeft,
-        //   "scaleOriginTop: ",
-        //   scaleOriginTop,
-        //   "clientWidth: ",
-        //   clientWidth,
-        //   "clientHeight: ",
-        //   clientHeight
-        // );
+          documentContainer.scrollTop = Math.round(newScrollTop);
+          documentContainer.scrollLeft = Math.round(newScrollLeft);
 
-        documentContainer.scrollTop = Math.round(newScrollTop);
-        documentContainer.scrollLeft = Math.round(newScrollLeft);
-
-        preScrollWidth = scrollWidth;
-        preScrollHeight = scrollHeight;
-        preViewScale = viewScaleRef.current;
+          preScrollWidth = scrollWidth;
+          preScrollHeight = scrollHeight;
+          preViewScale = viewScaleRef.current;
+        }
       }
     });
     observer.observe(pagesViewsContainer, { box: "border-box" });
