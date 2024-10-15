@@ -4,7 +4,6 @@ import usePdfReaderStore from "src/stores/usePdfReaderStore";
 import { debounce, throttle } from "lodash-es";
 import useReactiveRef from "src/hooks/useReactiveRef";
 import EventListenerContainer from "@/utils/EventListenerContainer";
-// import { WorkerProxy } from "worker-handler";
 import { pdfWorker } from "../../../workers/pdf.main";
 
 interface DocumentContainerProps extends Props {}
@@ -26,12 +25,6 @@ export default memo(function DocumentContainer({
   const pdfReaderEmitter = usePdfReaderStore((s) => s.emitter);
   const minRenderScale = usePdfReaderStore((s) => s.minRenderScale);
   const getPagesInView = usePdfReaderStore((s) => s.getPagesInView);
-
-  const finalScale = useMemo(
-    () => getFinalScale(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scale, scaleMappingRatio]
-  );
 
   const actualViewScale = useMemo(
     () => getActualViewScale(),
@@ -83,8 +76,6 @@ export default memo(function DocumentContainer({
   const renderIdRef = useRef<number>(0);
   // * enablererenderOnScroll 用来记录一个布尔值，决定当前的 rerenderOnScroll 回调是否生效
   const enablererenderOnScrollRef = useRef<boolean>(false);
-  // * previewCanvasStateRef 用来记录每一页是否已经生成过低分图：false 代表还未生成过，true 代表生成过且已经过期，如果是 canvas 元素本身则代表在使用中
-  const previewCanvasStateRef = useRef<(boolean | HTMLCanvasElement)[]>([]);
 
   const pageViews = (
     <div
@@ -127,19 +118,13 @@ export default memo(function DocumentContainer({
   );
 
   // * 开启 pages 渲染
-
-  useEffect(() => {
-    if (pages.length)
-      previewCanvasStateRef.current = new Array(pages.length).fill(false);
-  }, [pages]);
-
   function render(pageNums: number[]) {
     if (pageNums.length === 0) return;
-    console.log(...pageNums, "加入渲染");
     const currentRenderId = renderIdRef.current;
     const canvasMap = new Map<number, HTMLCanvasElement>();
     const pageSizeMap = new Map<number, [number, number]>();
-    const scale = finalScale;
+    const scale = getFinalScale();
+    // console.log(...pageNums, "加入渲染", scale, str);
 
     pageNums.forEach((pageNum) => {
       const pageIndex = pageNum - 1;
@@ -170,7 +155,6 @@ export default memo(function DocumentContainer({
       })
       .addEventListener("message", (res) => {
         if (currentRenderId !== renderIdRef.current) return;
-
         const {
           data: [pageNum, isDone, imageBitmap],
         } = res;
@@ -178,25 +162,51 @@ export default memo(function DocumentContainer({
           const pageIndex = pageNum - 1;
           const canvasContainerEl = canvasContainerElsRef.current[pageIndex];
           const canvasEl = canvasMap.get(pageNum);
-          if (!canvasEl) return;
+          if (!canvasEl || !canvasContainerEl) return;
 
           canvasEl.getContext("2d")?.drawImage(imageBitmap!, 0, 0);
+
+          // 需要确保旧的 canvasEl 已经被移除后，再注册新的 canvasEl
+          const observer = new MutationObserver((mutationsList) => {
+            for (const mutation of mutationsList) {
+              mutation.removedNodes.forEach((node) => {
+                if (node === canvasElsRef.current[pageNum - 1]) {
+                  // 向 canvasElsRef 中注册当前的 canvasEl
+                  canvasElsRef.current[pageNum - 1] = canvasEl;
+                }
+              });
+              observer.disconnect();
+            }
+          });
+          observer.observe(canvasContainerEl!, { childList: true });
+
           // 更新 DOM
-          canvasContainerEl?.replaceChildren(canvasEl);
-          // 向 canvasElsRef 中注册当前的 canvasEl
-          canvasElsRef.current[pageNum - 1] = canvasEl;
+          canvasContainerEl.replaceChildren(canvasEl);
+
+          // console.log(
+          //   "main 1 =========== 第 " +
+          //     pageNum +
+          //     " 页渲染完成" +
+          //     (currentRenderId !== renderIdRef.current ? " ---已过期" : ""),
+          //   canvasEl
+          // );
           // console.log("第 " + pageNum + " 页渲染完成", canvasEl);
           // 改变 renderListRef 中的状态
           renderListRef.current.set(pageNum, 1);
         } else {
           renderListRef.current.set(pageNum, -1);
+          // console.log(
+          //   "main -1 =========== 第 " +
+          //     pageNum +
+          //     " 页取消渲染" +
+          //     (currentRenderId !== renderIdRef.current ? " ---已过期" : "")
+          // );
           // console.log("第 " + pageNum + " 页取消渲染", canvasMap.get(pageNum));
         }
       })
       .promise.then(() => {
-        // if (currentRenderId !== renderIdRef.current) return;
+        if (currentRenderId !== renderIdRef.current) return;
         // console.log("所有 page 渲染完成", renderListRef.current);
-        // console.log(canvasElsRef);
       })
       .catch(() => {});
   }
@@ -207,10 +217,12 @@ export default memo(function DocumentContainer({
 
   useEffect(() => {
     if (!pages.length) return;
-    pdfReaderEmitter.emit("enableRerender");
+    pdfReaderEmitter.emit("enableRerenderOnScroll");
+    // console.log("enableRerenderOnScroll");
     // console.log("开启新的渲染");
     const pagesInView = getPagesInView();
     renderListRef.current = new Map();
+    // 这次要渲染的页注册其状态
     pagesInView.forEach((pageNum) => {
       renderListRef.current.set(pageNum, 0);
     });
@@ -250,14 +262,6 @@ export default memo(function DocumentContainer({
         `scale(${actualViewScale / +canvasEl.dataset.scale!})`
       );
     });
-    // 同理，previewCanvas 也处理一遍
-    previewCanvasStateRef.current.forEach((canvasEl) => {
-      if (typeof canvasEl === "boolean") return;
-      canvasEl.style.setProperty(
-        "transform",
-        `scale(${actualViewScale / +canvasEl.dataset.scale!})`
-      );
-    });
     // viewScale 作为依赖是由于更改 viewScale 时，函数节流会使得当前 viewScale 与 canvas 的渲染 scale 不匹配，直到新的 canvas 被创建
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewScale]);
@@ -290,7 +294,7 @@ export default memo(function DocumentContainer({
       observer.disconnect();
       // 立即关闭 initialObserver 的监听，preScrollSize 停止更新
       enableRecordPreScrollSizeRef.current = false;
-      // 要到下一帧才可以开启 enableScrollOnScaleRef，这里设置的 scrollTop 和 ScrollLeft 会在另一个 observer 中被覆盖掉
+      // 要到下一帧才可以开启 enableScrollOnScaleRef，否则这里设置的 scrollTop 和 ScrollLeft 会在另一个 observer 中被覆盖掉
       requestAnimationFrame(() => {
         enableScrollOnScaleRef.current = true;
       });
@@ -342,7 +346,7 @@ export default memo(function DocumentContainer({
     const onEnableRerender = () => {
       enablererenderOnScrollRef.current = true;
     };
-    pdfReaderEmitter.on("enableRerender", onEnableRerender);
+    pdfReaderEmitter.on("enableRerenderOnScroll", onEnableRerender);
 
     // 通过一个 initialObserver 来监视 pagesViewsContainer 的大小，当 enableScrollOnScale 为 true 时初始化完成，得到 preScrollWidth 和 preScrollHeight 的初始值
     let preScrollWidth: number;
@@ -350,12 +354,14 @@ export default memo(function DocumentContainer({
 
     // 监视 pagesViewsContainer 的尺寸变化，得到新的 scroll 值
     const observer = new ResizeObserver((entries) => {
-      if (enableRecordPreScrollSizeRef.current) {
+      // if (enableRecordPreScrollSizeRef.current) {
+      if (!enableScrollOnScaleRef.current) {
         for (const entry of entries) {
           const borderBoxSize = entry.borderBoxSize[0];
           preScrollWidth = borderBoxSize.inlineSize;
           preScrollHeight = borderBoxSize.blockSize;
         }
+        // console.log(preScrollWidth, preScrollHeight);
       }
 
       if (!enableScrollOnScaleRef.current) return;
@@ -384,6 +390,31 @@ export default memo(function DocumentContainer({
           clientHeight
         );
 
+        // console.log(
+        //   "preViewScale: ",
+        //   preViewScale,
+        //   "preScrollWidth: ",
+        //   preScrollWidth,
+        //   "preScrollHeight: ",
+        //   preScrollHeight,
+        //   "preScrollLeft: ",
+        //   preScrollLeft,
+        //   "preScrollTop: ",
+        //   preScrollTop,
+        //   "scrollWidth: ",
+        //   scrollWidth,
+        //   "scrollHeight: ",
+        //   scrollHeight,
+        //   "scaleOriginLeft: ",
+        //   scaleOriginLeft,
+        //   "scaleOriginTop: ",
+        //   scaleOriginTop,
+        //   "clientWidth: ",
+        //   clientWidth,
+        //   "clientHeight: ",
+        //   clientHeight
+        // );
+
         documentContainer.scrollTop = Math.round(newScrollTop);
         documentContainer.scrollLeft = Math.round(newScrollLeft);
 
@@ -396,7 +427,7 @@ export default memo(function DocumentContainer({
 
     return () => {
       pdfReaderEmitter.off("setViewScale", onSetViewScale);
-      pdfReaderEmitter.off("enableRerender", onEnableRerender);
+      pdfReaderEmitter.off("enableRerenderOnScroll", onEnableRerender);
       observer.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -435,10 +466,6 @@ export default memo(function DocumentContainer({
   const offsetCurrentPageNum = usePdfReaderStore((s) => s.offsetCurrentPageNum);
 
   const rerenderOnScroll = throttle(() => {
-    if (!enablererenderOnScrollRef.current) {
-      // console.log("rerenderOnScroll 未开启");
-      return;
-    }
     // 这次要渲染的页
     const pagesInView = getPagesInView();
 
@@ -546,7 +573,8 @@ export default memo(function DocumentContainer({
       tabIndex={0}
       onScroll={(e) => {
         updateCurrentPageNum();
-        rerenderOnScroll();
+        // 由于 rerenderOnScroll 使用了 throttle 并开启了 trailing，因此这个判断条件要放在 rerenderOnScroll 外部，否则内部的函数读取到的这个条件不是实时的
+        if (enablererenderOnScrollRef.current) rerenderOnScroll();
         if (enableRecordScrollRef.current) updateScroll(e);
       }}
       ref={documentContainerRef}

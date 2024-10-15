@@ -42,8 +42,8 @@ importers:
         specifier: ^18.2.0
         version: 18.2.0(react@18.2.0)
       worker-handler:
-        specifier: ^0.2.8
-        version: 0.2.8
+        specifier: ^0.2.9
+        version: 0.2.9
       zustand:
         specifier: ^4.5.2
         version: 4.5.2(@types/react@18.2.66)(react@18.2.0)
@@ -3033,8 +3033,8 @@ packages:
   wide-align@1.1.5:
     resolution: {integrity: sha512-eDMORYaPNZ4sQIuuYPDHdQvf4gyCF9rEEV/yPxGfwPkRodwEgiMUUXTx/dex+Me0wxx53S+NgUHaP7y3MGlDmg==}
 
-  worker-handler@0.2.8:
-    resolution: {integrity: sha512-Yd/EvzMTeNyicKOy8JTfh9tCz7cfth3DO27wSmpP/in/hUdGOkpgbJNByPLxar0DbDDaMOB2Pev4tkmfg09ogQ==}
+  worker-handler@0.2.9:
+    resolution: {integrity: sha512-73hNTvoAA9egwv0wX32L+TwBbk4F67qa0PvxsQSjJ3JVOHn00igakrqkQldx3SriIS6FY3mqwfE5KGMWU4ORHw==}
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
@@ -6513,7 +6513,7 @@ snapshots:
       string-width: 4.2.3
     optional: true
 
-  worker-handler@0.2.8: {}
+  worker-handler@0.2.9: {}
 
   wrappy@1.0.2: {}
 

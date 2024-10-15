@@ -90,7 +90,7 @@ interface EventHandlers {
     number | null | undefined,
     number | null | undefined
   ];
-  enableRerender: [];
+  enableRerenderOnScroll: [];
 }
 
 type Emitter = {
@@ -380,7 +380,7 @@ const usePdfReaderStore = create<
        */
       commitScale: (scale) => {
         pdfWorker.execute("cancelRenders");
-        get().emitter.emit("enableRerender");
+        get().emitter.emit("enableRerenderOnScroll");
         const newScale = scale || get().viewScale;
         if (newScale === get().scale) {
           return;

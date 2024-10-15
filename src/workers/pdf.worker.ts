@@ -133,11 +133,11 @@ onmessage = createOnmessage<PdfWorkerActions>({
       renderTaskPromises.push(renderTaskPromise);
       try {
         await renderTaskPromise;
-        // console.log(pageNum + " 页渲染完成");
+        // console.log("worker 1 =========== 第 " + pageNum + " 页渲染完成");
         const imageBitmap = canvas.transferToImageBitmap();
         this.$post([pageNum, true, imageBitmap], [imageBitmap]);
       } catch (error) {
-        // console.log(`取消渲染第 ${pageNum} 页`, error);
+        // console.log("worker -1 =========== 第 " + pageNum + " 页取消渲染");
         this.$post([pageNum, false, null]);
       }
       currentRenderTasks.delete(renderTask);
@@ -157,6 +157,7 @@ onmessage = createOnmessage<PdfWorkerActions>({
     }
     Promise.all(renderTaskPromises)
       .then(() => {
+        // console.log("worker -1 =========== end");
         this.$end([0, true, null]);
       })
       .catch(() => {});
