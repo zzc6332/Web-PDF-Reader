@@ -45,20 +45,22 @@ export default memo(function PageTool({
 
   return (
     <div className={className}>
-      <Icon
-        type="#icon-arrow-left"
-        {...iconProps}
-        onClick={() => {
-          offsetCurrentPageNum(-1);
-        }}
-      ></Icon>
-      <Icon
-        type="#icon-arrow-right"
-        {...iconProps}
-        onClick={() => {
-          offsetCurrentPageNum(1);
-        }}
-      ></Icon>
+      <div className="flex max-sm:hidden">
+        <Icon
+          type="#icon-arrow-left"
+          {...iconProps}
+          onClick={() => {
+            offsetCurrentPageNum(-1);
+          }}
+        ></Icon>
+        <Icon
+          type="#icon-arrow-right"
+          {...iconProps}
+          onClick={() => {
+            offsetCurrentPageNum(1);
+          }}
+        ></Icon>
+      </div>
       <div className="select-none">
         <Input
           className="mx-2 h-8 w-14 inline-flex items-center [&>input]:text-end [&>input]:text-4"

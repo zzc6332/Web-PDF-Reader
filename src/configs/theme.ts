@@ -17,6 +17,7 @@ export const colorsList = {
   "on-pri-3": ["#a3a3a3", "#a3a3a3"], // neutral-400
   "border-l1": ["rgb(0 0 0 / 0.1)", "rgb(255 255 255 / 0.1)"],
   "border-l2": ["rgb(0 0 0 / 0.2)", "rgb(255 255 255 / 0.2)"],
+  "border-l3": ["rgb(0 0 0 / 0.3)", "rgb(255 255 255 / 0.3)"],
 };
 
 function getColors() {

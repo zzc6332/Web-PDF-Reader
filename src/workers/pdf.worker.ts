@@ -3,7 +3,6 @@ import * as pdfjsLib from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?worker&url";
 import {
   DocumentInitParameters,
-  GetViewportParameters,
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
   PDFPageProxy,
@@ -73,9 +72,9 @@ export type PdfWorkerActions = {
   }>;
 
   renderPages: (
-    pageSizeMap: Map<number, [number, number]>,
+    pageSizeMap: Map<number, [number, number, number]>, // 元组中的三项分别代表 width、heigh、scale
     pageNums: number[],
-    getViewportParameters: GetViewportParameters
+    isThumb?: boolean
   ) => ActionResult<[number, boolean, ImageBitmap | null]>;
   cancelRenders: () => ActionResult<void>;
 };
@@ -115,22 +114,25 @@ onmessage = createOnmessage<PdfWorkerActions>({
     };
   },
 
-  async renderPages(pageSizeMap, pageNums, getViewportParameters) {
+  async renderPages(pageSizeMap, pageNums, isThumb = false) {
     const renderTaskPromises: Promise<void>[] = [];
 
     // 渲染页面
-    for (const pageNum of pageNums) {
+    for (const arrIndex in pageNums) {
+      const pageNum = pageNums[arrIndex];
       const pageIndex = pageNum - 1;
       const page = pdfPageProxies[pageIndex];
-      const [width, height] = pageSizeMap.get(pageNum)!;
+      const [width, height, scale] = pageSizeMap.get(pageNum)!;
       const canvas = new OffscreenCanvas(width, height);
       const canvasContext = canvas.getContext("2d");
-      const viewport = page.getViewport(getViewportParameters);
+      const viewport = page.getViewport({ scale });
+      // console.log("开启渲染");
       // console.log(pageNum + " 页开始渲染");
       const renderTask = page.render({ canvasContext, viewport });
-      currentRenderTasks.add(renderTask);
+      if (!isThumb) currentRenderTasks.add(renderTask);
       const renderTaskPromise = renderTask.promise;
       renderTaskPromises.push(renderTaskPromise);
+      // 以下是一次开启一个渲染任务的方式
       try {
         await renderTaskPromise;
         // console.log("worker 1 =========== 第 " + pageNum + " 页渲染完成");
@@ -141,6 +143,7 @@ onmessage = createOnmessage<PdfWorkerActions>({
         this.$post([pageNum, false, null]);
       }
       currentRenderTasks.delete(renderTask);
+      // 以下是一次性开启所有渲染任务的方式
       // renderTaskPromise
       //   .then(() => {
       //     const imageBitmap = canvas.transferToImageBitmap();

@@ -13,7 +13,7 @@
     "gc": "node scripts/generate-components.js"
   },
   "dependencies": {
-    "@douyinfe/semi-ui": "^2.56.0",
+    "@douyinfe/semi-ui": "^2.67.2",
     "@semi-bot/semi-theme-together": "^1.0.1",
     "@types/lodash-es": "^4.17.12",
     "@unocss/reset": "^0.59.1",

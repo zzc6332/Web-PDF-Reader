@@ -4,7 +4,7 @@ import usePdfReaderStore from "src/stores/usePdfReaderStore";
 import { debounce, throttle } from "lodash-es";
 import useReactiveRef from "src/hooks/useReactiveRef";
 import EventListenerContainer from "@/utils/EventListenerContainer";
-import { pdfWorker } from "../../../workers/pdf.main";
+import { pdfWorker } from "src/workers/pdf.main";
 
 interface DocumentContainerProps extends Props {}
 
@@ -87,7 +87,7 @@ export default memo(function DocumentContainer({
         const width = page.width * actualViewScale;
         const height = page.height * actualViewScale;
         return (
-          // 最外层的 container，用于设置 padding、padding
+          // 外层的 container，用于设置 padding、padding
           <div
             key={pageIndex}
             className="relative box-content"
@@ -98,18 +98,14 @@ export default memo(function DocumentContainer({
               height: Math.floor(height),
             }}
           >
-            {/* 内层的 container，用于包裹渲染内容和背景色 */}
-            <div className="relative size-full outline-l1">
-              {/* 包裹 canvas 的 container */}
-              <div
-                className="absolute left-0 top-0"
-                ref={(el) => {
-                  canvasContainerElsRef.current[pageIndex] = el;
-                }}
-              >
-                {/* 在这个位置插入 canvas 的 dom */}
-              </div>
-              <div className="size-full bg-white"></div>
+            {/* 内层的 container，用于包裹渲染内容和背景色*/}
+            <div
+              className="relative size-full bg-white outline-l1"
+              ref={(el) => {
+                canvasContainerElsRef.current[pageIndex] = el;
+              }}
+            >
+              {/* 在这个位置插入 canvas 的 dom */}
             </div>
           </div>
         );
@@ -122,7 +118,7 @@ export default memo(function DocumentContainer({
     if (pageNums.length === 0) return;
     const currentRenderId = renderIdRef.current;
     const canvasMap = new Map<number, HTMLCanvasElement>();
-    const pageSizeMap = new Map<number, [number, number]>();
+    const pageSizeMap = new Map<number, [number, number, number]>();
     const scale = getFinalScale();
     // console.log(...pageNums, "加入渲染", scale, str);
 
@@ -133,6 +129,8 @@ export default memo(function DocumentContainer({
       // 创建 canvas 元素，为其设置属性，并使用自定义属性标记它的初始 scale
       const canvasEl = document.createElement("canvas");
       canvasEl.style.setProperty("position", "absolute");
+      canvasEl.style.setProperty("top", "0");
+      canvasEl.style.setProperty("left", "0");
       canvasEl.setAttribute("data-scale", scale + "");
       canvasEl.setAttribute("width", page.width * scale + "");
       canvasEl.setAttribute("height", page.height * scale + "");
@@ -145,14 +143,12 @@ export default memo(function DocumentContainer({
       newCanvasElsRef.current[pageIndex] = canvasEl;
 
       canvasMap.set(pageNum, canvasEl);
-      pageSizeMap.set(pageNum, [canvasEl.width, canvasEl.height]);
+      pageSizeMap.set(pageNum, [canvasEl.width, canvasEl.height, scale]);
     });
 
     // 执行 worker 中的 renderPages，开启渲染任务
     pdfWorker
-      .execute("renderPages", [], pageSizeMap, pageNums, {
-        scale,
-      })
+      .execute("renderPages", [], pageSizeMap, pageNums)
       .addEventListener("message", (res) => {
         if (currentRenderId !== renderIdRef.current) return;
         const {
@@ -226,7 +222,6 @@ export default memo(function DocumentContainer({
     // console.log("enableRerenderOnScroll");
     // console.log("开启新的渲染");
     const pagesInView = getPagesInView();
-    renderListRef.current = new Map();
     // 这次要渲染的页注册其状态
     pagesInView.forEach((pageNum) => {
       renderListRef.current.set(pageNum, 0);
@@ -234,6 +229,9 @@ export default memo(function DocumentContainer({
     renderIdRef.current++;
     render([...pagesInView]);
     // console.log("渲染了： ", pagesInView);
+    return () => {
+      renderListRef.current = new Map();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, scale]);
 
@@ -571,8 +569,9 @@ export default memo(function DocumentContainer({
   return (
     <div
       className={
-        "relative size-full overflow-auto bg-bg-3 box-border focus:outline-none " +
-        className
+        className +
+        " " +
+        "relative size-full overflow-auto bg-bg-3 box-border focus:outline-none "
       }
       tabIndex={0}
       onScroll={(e) => {

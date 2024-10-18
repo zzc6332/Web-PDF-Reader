@@ -39,7 +39,7 @@ const renderState = {
     proxy: WorkerProxy<PDFPageProxy>;
   }[],
   // pdfPath: "http://localhost:5173/statics/profile.pdf", // ***** 临时
-  pdfPath: "http://localhost:5173/statics/5.pdf", // ***** 临时
+  pdfPath: "http://192.168.6.2:5173/statics/0.pdf", // ***** 临时
 };
 
 const workerState = {

@@ -18,6 +18,7 @@ const colors = {
   "on-pri-3": "var(--on-pri-3)",
   "border-l1": "var(--border-l1)",
   "border-l2": "var(--border-l2)",
+  "border-l3": "var(--border-l3)",
 };
 
 const theme = {
@@ -58,6 +59,12 @@ export default defineConfig({
       "outline-l2",
       {
         outline: "1px solid var(--border-l2)",
+      },
+    ],
+    [
+      "outline-l3",
+      {
+        outline: "1px solid var(--border-l3)",
       },
     ],
   ],

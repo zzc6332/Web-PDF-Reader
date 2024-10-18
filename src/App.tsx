@@ -7,7 +7,7 @@ function App() {
   const themeIndex = useThemeStore((s) => s.themeIndex);
   useThemes(colorsList, themeIndex);
   return (
-    <div className="h-screen">
+    <div className={"h-screen" + " semi-light-scrollbar"}>
       <PDFReader />
     </div>
   );
