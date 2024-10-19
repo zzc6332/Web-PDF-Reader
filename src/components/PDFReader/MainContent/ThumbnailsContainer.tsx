@@ -149,9 +149,13 @@ const ThumbnailsContainer = memo(
         const containerRect = container.getBoundingClientRect();
         // 跳转的缩略图完全在视图外时
         if (!isThumbInViewPort(thumb)) {
-          const lastThumb = thumbCanvasContainerElsRef.current[pageIndex - 1]!;
+          const lastThumb =
+            pageIndex >= 1
+              ? thumbCanvasContainerElsRef.current[pageIndex - 1]!
+              : null;
           if (
-            // 如果上一个当前页
+            // 如果上一个当前页是这次要跳转的页的前一页
+            lastThumb &&
             isThumbInViewPort(lastThumb, true) &&
             lastPageNumRef.current === currentPageNum - 1
           ) {

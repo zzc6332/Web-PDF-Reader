@@ -315,9 +315,10 @@ export default memo(function ZoomTool({
             commitScaleOnClick();
           }
         }}
+        className="max-sm:hidden"
       >
         <Slider
-          className="w-20 select-none max-sm:hidden lg:w-60 md:w-40 sm:w-20"
+          className="w-20 select-none lg:w-60 md:w-40 sm:w-20"
           value={sliderValue}
           max={sliderMaxValue}
           min={sliderMinValue}
