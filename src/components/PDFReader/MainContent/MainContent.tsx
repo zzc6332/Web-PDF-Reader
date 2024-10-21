@@ -3,6 +3,7 @@ import DocumentContainer from "./DocumentContainer";
 import ThumbnailsContainer from "./ThumbnailsContainer";
 import Props from "src/types/props";
 import usePdfReaderStore from "src/stores/usePdfReaderStore";
+import Selector from "./Selector";
 
 interface DocumentLoadingProps extends Props {}
 
@@ -11,8 +12,7 @@ export default memo(function MainContent({
 }: DocumentLoadingProps) {
   const className = classNameProp || "";
 
-  const loadWorkerProxies = usePdfReaderStore((s) => s.loadWorkerProxies);
-  loadWorkerProxies();
+  const isPdfActive = usePdfReaderStore((s) => s.isPdfActive);
 
   // sideSheetEl 是一个侧边栏，可以控制它的显示与隐藏，其唯一直接子元素是 thumbnailsContainer
   const sideSheetElRef = useRef<HTMLDivElement>(null);
@@ -26,8 +26,12 @@ export default memo(function MainContent({
   useEffect(() => {
     const sideSheetEl = sideSheetElRef.current!;
     const width = getContainerWidthRef.current!.getContainerWidth();
-    sideSheetEl.style.setProperty("width", isThumbsVisible ? width : "0");
-  }, [isThumbsVisible]);
+    sideSheetEl.style.setProperty(
+      "width",
+      !!isPdfActive && isThumbsVisible ? width : "0"
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isThumbsVisible, isPdfActive]);
 
   return (
     <div className={"flex" + " " + className}>
@@ -43,7 +47,11 @@ export default memo(function MainContent({
           className="float-right"
         />
       </div>
-      <DocumentContainer className="flex-auto" />
+      {isPdfActive ? (
+        <DocumentContainer className="flex-auto" />
+      ) : (
+        <Selector />
+      )}
     </div>
   );
 });

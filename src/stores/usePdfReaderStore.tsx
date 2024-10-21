@@ -38,8 +38,9 @@ const renderState = {
     height: number;
     proxy: WorkerProxy<PDFPageProxy>;
   }[],
-  // pdfPath: "http://localhost:5173/statics/profile.pdf", // ***** 临时
-  pdfPath: "http://192.168.6.2:5173/statics/0.pdf", // ***** 临时
+  // pdfSrc: "http://192.168.6.2:5173/statics/0.pdf" as null | string | Blob,
+  pdfSrc: null as null | string | Blob,
+  isPdfActive: false,
 };
 
 const workerState = {
@@ -119,11 +120,13 @@ type ResetStateActions = {
 };
 
 type WorkerActions = {
-  loadWorkerProxies: () => Promise<void>;
+  loadWorkerProxies: (src: string | Blob) => Promise<void>;
 };
 
 type InitialActions = {
   specifyDocumentContainer: (documentContainer: HTMLDivElement | null) => void;
+  setPdfSrc: (pdfSrc: null | string | Blob) => void;
+  setIsPdfActive: (isPdfActive: boolean) => void;
 };
 
 type ScaleActions = {
@@ -245,9 +248,8 @@ const usePdfReaderStore = create<
 
       //#region - WorkerActions
 
-      loadWorkerProxies: async () => {
-        const { data } = await pdfWorker.execute("load", [], get().pdfPath)
-          .promise;
+      loadWorkerProxies: async (src) => {
+        const { data } = await pdfWorker.execute("load", [], src).promise;
         const loadingTaskWP = await data.pdfDocumentLoadingTask;
         const pdfDocumentWP = await data.pdfDocumentProxy;
         const pagesWP = await data.pdfPageProxies;
@@ -270,7 +272,7 @@ const usePdfReaderStore = create<
           };
           pages.push(page);
         }
-        set({ pages });
+        set({ pages, isPdfActive: true });
       },
 
       //#endregion
@@ -280,6 +282,19 @@ const usePdfReaderStore = create<
       // specifyDocumentContainer 用于指定 documentContainer 的 DOM 元素
       specifyDocumentContainer: (documentContainer) => {
         set({ documentContainer });
+      },
+
+      setPdfSrc: (pdfSrc) => {
+        set({ pdfSrc });
+        if (pdfSrc) {
+          get().loadWorkerProxies(pdfSrc);
+        } else {
+          set({ isPdfActive: false });
+        }
+      },
+
+      setIsPdfActive: (isPdfActive) => {
+        set({ isPdfActive });
       },
 
       //#endregion

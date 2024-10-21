@@ -10,8 +10,8 @@ import {
   TypedArray,
 } from "pdfjs-dist/types/src/display/api";
 
-// import { ActionResult, createOnmessage } from "src/worker-handler/worker";
-import { ActionResult, createOnmessage } from "worker-handler/worker";
+import { ActionResult, createOnmessage } from "src/worker-handler/worker";
+// import { ActionResult, createOnmessage } from "worker-handler/worker";
 
 //#region - 指定 workerPort
 // 在 web worker 中，pdfjs 通过设置 workerPort 的方式来指定它的 pdf.worker.js
@@ -61,11 +61,11 @@ const currentRenderTasks = new Set<RenderTask>();
 
 export type PdfWorkerActions = {
   init: (
-    src: string | URL | ArrayBuffer
+    src: string | URL | ArrayBuffer | Blob
   ) => ActionResult<PDFDocumentLoadingTask>;
   loadDocument: () => ActionResult<PDFDocumentProxy>;
   loadPages: () => ActionResult<PDFPageProxy[]>;
-  load: (src: string | URL | ArrayBuffer) => ActionResult<{
+  load: (src: string | URL | ArrayBuffer | Blob) => ActionResult<{
     pdfDocumentLoadingTask: PDFDocumentLoadingTask;
     pdfDocumentProxy: PDFDocumentProxy;
     pdfPageProxies: PDFPageProxy[];
@@ -82,7 +82,9 @@ export type PdfWorkerActions = {
 onmessage = createOnmessage<PdfWorkerActions>({
   async init(src) {
     pdfDocumentLoadingTask = pdfjsLib.getDocument(
-      createDocumentInitParameters(src)
+      createDocumentInitParameters(
+        src instanceof Blob ? await src.arrayBuffer() : src
+      )
     );
     return pdfDocumentLoadingTask;
   },

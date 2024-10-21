@@ -16,8 +16,10 @@ interface ToggleButtonProps extends Omit<Props, "defaultValue"> {
   uncheckedBorderColor?: string;
   uncheckedContent?: React.ReactNode;
   onToggle?: (isChecked: boolean) => void;
+  onClick?: () => void;
   defaultValue?: boolean;
   value?: boolean;
+  disabled?: boolean;
 }
 
 export default memo(function ToggleButton({
@@ -35,13 +37,20 @@ export default memo(function ToggleButton({
   uncheckedBorderColor = colors["border-l2"],
   uncheckedContent = <span className="text-xs">OFF</span>,
   onToggle,
+  onClick,
   defaultValue = true,
   value,
+  disabled = false,
 }: ToggleButtonProps) {
   const className = classNameProp || "";
   const [isChecked, setIsChecked] = useState(
     value === undefined ? defaultValue : value
   );
+
+  useEffect(() => {
+    setIsChecked(value === undefined ? defaultValue : value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   const [isInitialed, setIsInitialed] = useState(false);
 
@@ -118,7 +127,8 @@ export default memo(function ToggleButton({
         height,
       }}
       onClick={() => {
-        setIsChecked((isChecked) => !isChecked);
+        if (!disabled) setIsChecked((isChecked) => !isChecked);
+        if (onClick) onClick();
       }}
     >
       {isChecked ? checkedContent : uncheckedContent}

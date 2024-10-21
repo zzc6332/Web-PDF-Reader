@@ -120,7 +120,6 @@ const ThumbnailsContainer = memo(
         });
         const renderPageNumsList = [...renderPageNums];
         render(renderPageNumsList);
-
         preRenderStatesRef.current = [...renderStatesRef.current!];
       }
 
@@ -131,6 +130,11 @@ const ThumbnailsContainer = memo(
       }, debounceWait);
 
       useEffect(() => {
+        // 初始化
+        thumbCanvasContainerElsRef.current.length = pages.length;
+        renderStatesRef.current = new Set();
+        preRenderStatesRef.current = [];
+
         // 可以再把后面多余的遍历去掉
         renderNewThumb();
 
@@ -181,7 +185,7 @@ const ThumbnailsContainer = memo(
       const thumbViews = (
         <div
           // ref={thumbViewsContainerRef}
-          className="min-h-full min-w-full inline-flex flex-col items-center justify-center p-t-2"
+          className="min-h-full min-w-full inline-flex flex-col items-center p-t-2"
         >
           {pages.map((page, pageIndex) => {
             const widthOg = page.width;
@@ -202,6 +206,7 @@ const ThumbnailsContainer = memo(
                   }}
                   ref={(el) => {
                     thumbCanvasContainerElsRef.current[pageIndex] = el;
+                    el?.replaceChildren("");
                   }}
                   onClick={() => {
                     setCurrentPageNum(pageIndex + 1);
