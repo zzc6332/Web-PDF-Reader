@@ -132,6 +132,9 @@ const ThumbnailsContainer = memo(
       useEffect(() => {
         // 初始化
         thumbCanvasContainerElsRef.current.length = pages.length;
+        thumbCanvasContainerElsRef.current.forEach((thumbCanvasContainerEl) => {
+          thumbCanvasContainerEl?.replaceChildren("");
+        });
         renderStatesRef.current = new Set();
         preRenderStatesRef.current = [];
 
@@ -206,7 +209,6 @@ const ThumbnailsContainer = memo(
                   }}
                   ref={(el) => {
                     thumbCanvasContainerElsRef.current[pageIndex] = el;
-                    el?.replaceChildren("");
                   }}
                   onClick={() => {
                     setCurrentPageNum(pageIndex + 1);

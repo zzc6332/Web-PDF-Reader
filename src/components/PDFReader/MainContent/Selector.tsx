@@ -17,6 +17,7 @@ export default memo(function Selector({
   const uploadRef = useRef<Upload>(null);
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [inputValue, setInputValue] = useState("");
 
   return (
     <div className={className + " " + "h-full w-full bg-bg-3 overflow-auto"}>
@@ -79,16 +80,20 @@ export default memo(function Selector({
           title="请输入在线 PDF 地址"
           centered
           onOk={() => {
+            setPdfSrc(inputValue);
             setModalVisible(false);
-            setTimeout(() => {
-              modalVisible;
-            });
+            setInputValue("");
           }}
           onCancel={() => {
             setModalVisible(false);
+            setInputValue("");
           }}
         >
-          <Input></Input>
+          <Input
+            onChange={(value) => {
+              setInputValue(value);
+            }}
+          ></Input>
         </Modal>
       </div>
     </div>

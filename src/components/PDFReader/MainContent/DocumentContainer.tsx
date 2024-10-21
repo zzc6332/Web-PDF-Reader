@@ -62,6 +62,173 @@ export default memo(function DocumentContainer({
 
   //#endregion
 
+  //#region - 控制 scroll
+
+  // * 页面刷新时 store 会从 sessionStorage 中读取 scrollX 和 scrollY，将它们应用到 documentContainer 上
+  const scrollX = usePdfReaderStore((s) => s.scrollX);
+  const scrollY = usePdfReaderStore((s) => s.scrollY);
+  const enableRecordScrollRef = useRef<boolean>(false);
+  // enableRecordPreScrollSizeRef 存储了一个开关，为 true 时则会在初始阶段记录 pagesViewsContainer 的 preScrollSize
+  const enableRecordPreScrollSizeRef = useRef<boolean>(true);
+  // enableScrollOnScaleRef 存储一个开关，为 true 时会在缩放时实时更新 scroll 的距离
+  const enableScrollOnScaleRef = useRef<boolean>(false);
+  useEffect(() => {
+    const documentContainer = documentContainerRef.current;
+    const pageViewsContainer = pageViewsContainerRef.current;
+    if (!documentContainer || !pageViewsContainer) return;
+    const { scrollHeight } = documentContainer;
+    const observer = new ResizeObserver((_, observer) => {
+      // 确定 scrollHeight 发生过变化了再改变滚动条位置
+      if (scrollHeight === documentContainer.scrollHeight) return;
+      documentContainer!.scrollLeft = scrollX;
+      documentContainer!.scrollTop = scrollY;
+      enableRecordScrollRef.current = true;
+      // 滚动条改变前视图中的页面可能已经开始渲染，要取消掉
+      if (scrollY !== 0) pdfWorker.execute("cancelRenders");
+      observer.disconnect();
+      // 立即关闭 initialObserver 的监听，preScrollSize 停止更新
+      enableRecordPreScrollSizeRef.current = false;
+      // 要到下一帧才可以开启 enableScrollOnScaleRef，否则这里设置的 scrollTop 和 ScrollLeft 会在另一个 observer 中被覆盖掉
+      requestAnimationFrame(() => {
+        enableScrollOnScaleRef.current = true;
+      });
+    });
+    observer.observe(pageViewsContainer);
+    return () => {
+      observer.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // * 当 viewScale 变化时，更新 documentContainer 的 scroll
+  const getNewScroll = usePdfReaderStore((s) => s.getNewScroll);
+  useEffect(() => {
+    const pagesViewsContainer = pageViewsContainerRef.current;
+    const documentContainer = documentContainerRef.current;
+    if (!pagesViewsContainer || !documentContainer) return;
+
+    // const { clientWidth, clientHeight } = documentContainer;
+    let preViewScale = viewScale;
+    let preScrollLeft = 0;
+    let preScrollTop = 0;
+    let scaleOriginLeft = 0;
+    let scaleOriginTop = 0;
+    let { devicePixelRatio } = window;
+
+    const onSetViewScale = (
+      scrollLeft: number,
+      scrollTop: number,
+      _scaleOriginLeft?: number | null,
+      _scaleOriginTop?: number | null
+    ) => {
+      console.log("onViewScale");
+      const { clientWidth, clientHeight } = documentContainer;
+
+      preScrollLeft = scrollLeft;
+      preScrollTop = scrollTop;
+
+      scaleOriginLeft =
+        typeof _scaleOriginLeft === "number"
+          ? _scaleOriginLeft
+          : clientWidth / 2;
+      scaleOriginTop =
+        typeof _scaleOriginTop === "number"
+          ? _scaleOriginTop
+          : clientHeight / 2;
+    };
+    pdfReaderEmitter.on("setViewScale", onSetViewScale);
+
+    const onEnableRerender = () => {
+      enablererenderOnScrollRef.current = true;
+    };
+    pdfReaderEmitter.on("enableRerenderOnScroll", onEnableRerender);
+
+    // 通过一个 initialObserver 来监视 pagesViewsContainer 的大小，当 enableScrollOnScale 为 true 时初始化完成，得到 preScrollWidth 和 preScrollHeight 的初始值
+    let preScrollWidth: number;
+    let preScrollHeight: number;
+
+    // 监视 pagesViewsContainer 的尺寸变化，得到新的 scroll 值
+    const observer = new ResizeObserver((entries) => {
+      if (!enableScrollOnScaleRef.current) {
+        for (const entry of entries) {
+          const borderBoxSize = entry.borderBoxSize[0];
+          preScrollWidth = borderBoxSize.inlineSize;
+          preScrollHeight = borderBoxSize.blockSize;
+        }
+        // console.log(preScrollWidth, preScrollHeight);
+      } else {
+        if (!enableScrollOnScaleRef.current) return;
+        if (window.devicePixelRatio !== devicePixelRatio) {
+          devicePixelRatio = window.devicePixelRatio;
+          return;
+        }
+        for (const entry of entries) {
+          const borderBoxSize = entry.borderBoxSize[0];
+          const scrollWidth = borderBoxSize.inlineSize;
+          const scrollHeight = borderBoxSize.blockSize;
+
+          const { clientWidth, clientHeight } = documentContainer;
+
+          const { newScrollTop, newScrollLeft } = getNewScroll(
+            preViewScale,
+            preScrollWidth,
+            preScrollHeight,
+            preScrollLeft,
+            preScrollTop,
+            scrollWidth,
+            scrollHeight,
+            scaleOriginLeft,
+            scaleOriginTop,
+            clientWidth,
+            clientHeight
+          );
+
+          // console.log(
+          //   "preViewScale: ",
+          //   preViewScale,
+          //   "preScrollWidth: ",
+          //   preScrollWidth,
+          //   "preScrollHeight: ",
+          //   preScrollHeight,
+          //   "preScrollLeft: ",
+          //   preScrollLeft,
+          //   "preScrollTop: ",
+          //   preScrollTop,
+          //   "scrollWidth: ",
+          //   scrollWidth,
+          //   "scrollHeight: ",
+          //   scrollHeight,
+          //   "scaleOriginLeft: ",
+          //   scaleOriginLeft,
+          //   "scaleOriginTop: ",
+          //   scaleOriginTop,
+          //   "clientWidth: ",
+          //   clientWidth,
+          //   "clientHeight: ",
+          //   clientHeight
+          // );
+
+          documentContainer.scrollTop = Math.round(newScrollTop);
+          documentContainer.scrollLeft = Math.round(newScrollLeft);
+
+          preScrollWidth = scrollWidth;
+          preScrollHeight = scrollHeight;
+          preViewScale = viewScaleRef.current;
+        }
+      }
+    });
+    observer.observe(pagesViewsContainer, { box: "border-box" });
+
+    return () => {
+      pdfReaderEmitter.off("setViewScale", onSetViewScale);
+      pdfReaderEmitter.off("enableRerenderOnScroll", onEnableRerender);
+      observer.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  //#endregion
+
   //#region - pages 渲染
 
   const pageViewsContainerRef = useRef<HTMLDivElement>(null);
@@ -120,7 +287,7 @@ export default memo(function DocumentContainer({
     const canvasMap = new Map<number, HTMLCanvasElement>();
     const pageSizeMap = new Map<number, [number, number, number]>();
     const scale = getFinalScale();
-    // console.log(...pageNums, "加入渲染", scale, str);
+    // console.log(...pageNums, "加入渲染", scale);
 
     pageNums.forEach((pageNum) => {
       const pageIndex = pageNum - 1;
@@ -271,177 +438,11 @@ export default memo(function DocumentContainer({
 
   //#endregion
 
-  //#region - 控制 scroll
-
-  // * 页面刷新时 store 会从 sessionStorage 中读取 scrollX 和 scrollY，将它们应用到 documentContainer 上
-  const scrollX = usePdfReaderStore((s) => s.scrollX);
-  const scrollY = usePdfReaderStore((s) => s.scrollY);
-  const enableRecordScrollRef = useRef<boolean>(false);
-  // enableRecordPreScrollSizeRef 存储了一个开关，为 true 时则会在初始阶段记录 pagesViewsContainer 的 preScrollSize
-  const enableRecordPreScrollSizeRef = useRef<boolean>(true);
-  // enableScrollOnScaleRef 存储一个开关，为 true 时会在缩放时实时更新 scroll 的距离
-  const enableScrollOnScaleRef = useRef<boolean>(false);
-  useEffect(() => {
-    const documentContainer = documentContainerRef.current;
-    const pageViewsContainer = pageViewsContainerRef.current;
-    if (!documentContainer || !pageViewsContainer) return;
-    const { scrollHeight } = documentContainer;
-    const observer = new ResizeObserver((_, observer) => {
-      // 确定 scrollHeight 发生过变化了再改变滚动条位置
-      if (scrollHeight === documentContainer.scrollHeight) return;
-      documentContainer!.scrollLeft = scrollX;
-      documentContainer!.scrollTop = scrollY;
-      enableRecordScrollRef.current = true;
-      // 滚动条改变前视图中的页面可能已经开始渲染，要取消掉
-      if (scrollY !== 0) pdfWorker.execute("cancelRenders");
-      observer.disconnect();
-      // 立即关闭 initialObserver 的监听，preScrollSize 停止更新
-      enableRecordPreScrollSizeRef.current = false;
-      // 要到下一帧才可以开启 enableScrollOnScaleRef，否则这里设置的 scrollTop 和 ScrollLeft 会在另一个 observer 中被覆盖掉
-      requestAnimationFrame(() => {
-        enableScrollOnScaleRef.current = true;
-      });
-    });
-    observer.observe(pageViewsContainer);
-    return () => {
-      observer.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // * 当 viewScale 变化时，更新 documentContainer 的 scroll
-  const getNewScroll = usePdfReaderStore((s) => s.getNewScroll);
-  useEffect(() => {
-    const pagesViewsContainer = pageViewsContainerRef.current;
-    const documentContainer = documentContainerRef.current;
-    if (!pagesViewsContainer || !documentContainer) return;
-
-    // const { clientWidth, clientHeight } = documentContainer;
-    let preViewScale = viewScale;
-    let preScrollLeft = 0;
-    let preScrollTop = 0;
-    let scaleOriginLeft = 0;
-    let scaleOriginTop = 0;
-    let { devicePixelRatio } = window;
-
-    const onSetViewScale = (
-      scrollLeft: number,
-      scrollTop: number,
-      _scaleOriginLeft?: number | null,
-      _scaleOriginTop?: number | null
-    ) => {
-      const { clientWidth, clientHeight } = documentContainer;
-
-      preScrollLeft = scrollLeft;
-      preScrollTop = scrollTop;
-
-      scaleOriginLeft =
-        typeof _scaleOriginLeft === "number"
-          ? _scaleOriginLeft
-          : clientWidth / 2;
-      scaleOriginTop =
-        typeof _scaleOriginTop === "number"
-          ? _scaleOriginTop
-          : clientHeight / 2;
-    };
-    pdfReaderEmitter.on("setViewScale", onSetViewScale);
-
-    const onEnableRerender = () => {
-      enablererenderOnScrollRef.current = true;
-    };
-    pdfReaderEmitter.on("enableRerenderOnScroll", onEnableRerender);
-
-    // 通过一个 initialObserver 来监视 pagesViewsContainer 的大小，当 enableScrollOnScale 为 true 时初始化完成，得到 preScrollWidth 和 preScrollHeight 的初始值
-    let preScrollWidth: number;
-    let preScrollHeight: number;
-
-    // 监视 pagesViewsContainer 的尺寸变化，得到新的 scroll 值
-    const observer = new ResizeObserver((entries) => {
-      if (!enableScrollOnScaleRef.current) {
-        for (const entry of entries) {
-          const borderBoxSize = entry.borderBoxSize[0];
-          preScrollWidth = borderBoxSize.inlineSize;
-          preScrollHeight = borderBoxSize.blockSize;
-        }
-        // console.log(preScrollWidth, preScrollHeight);
-      } else {
-        if (!enableScrollOnScaleRef.current) return;
-        if (window.devicePixelRatio !== devicePixelRatio) {
-          devicePixelRatio = window.devicePixelRatio;
-          return;
-        }
-        for (const entry of entries) {
-          const borderBoxSize = entry.borderBoxSize[0];
-          const scrollWidth = borderBoxSize.inlineSize;
-          const scrollHeight = borderBoxSize.blockSize;
-
-          const { clientWidth, clientHeight } = documentContainer;
-
-          const { newScrollTop, newScrollLeft } = getNewScroll(
-            preViewScale,
-            preScrollWidth,
-            preScrollHeight,
-            preScrollLeft,
-            preScrollTop,
-            scrollWidth,
-            scrollHeight,
-            scaleOriginLeft,
-            scaleOriginTop,
-            clientWidth,
-            clientHeight
-          );
-
-          // console.log(
-          //   "preViewScale: ",
-          //   preViewScale,
-          //   "preScrollWidth: ",
-          //   preScrollWidth,
-          //   "preScrollHeight: ",
-          //   preScrollHeight,
-          //   "preScrollLeft: ",
-          //   preScrollLeft,
-          //   "preScrollTop: ",
-          //   preScrollTop,
-          //   "scrollWidth: ",
-          //   scrollWidth,
-          //   "scrollHeight: ",
-          //   scrollHeight,
-          //   "scaleOriginLeft: ",
-          //   scaleOriginLeft,
-          //   "scaleOriginTop: ",
-          //   scaleOriginTop,
-          //   "clientWidth: ",
-          //   clientWidth,
-          //   "clientHeight: ",
-          //   clientHeight
-          // );
-
-          documentContainer.scrollTop = Math.round(newScrollTop);
-          documentContainer.scrollLeft = Math.round(newScrollLeft);
-
-          preScrollWidth = scrollWidth;
-          preScrollHeight = scrollHeight;
-          preViewScale = viewScaleRef.current;
-        }
-      }
-    });
-    observer.observe(pagesViewsContainer, { box: "border-box" });
-
-    return () => {
-      pdfReaderEmitter.off("setViewScale", onSetViewScale);
-      pdfReaderEmitter.off("enableRerenderOnScroll", onEnableRerender);
-      observer.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  //#endregion
-
   //#region - dom 事件监听
 
   const updateCurrentPageNum = throttle(
     usePdfReaderStore((s) => s.updateCurrentPageNum),
-    500
+    100
   );
   const updateScroll = debounce(
     usePdfReaderStore((s) => s.updateScroll),
@@ -486,7 +487,6 @@ export default memo(function DocumentContainer({
     pagesInView.forEach((pageNum) => {
       renderListRef.current.set(pageNum, 0);
     });
-
     render([...pagesInView]);
   }, 500);
 
