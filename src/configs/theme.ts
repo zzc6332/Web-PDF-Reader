@@ -9,6 +9,9 @@ export const colorsList = {
   "bg-1": ["#fff", "#161616"], // white, neutral-700
   "bg-2": ["#f5f5f5", "#202020"], // neutral-100, neutral-600
   "bg-3": ["#e5e5e5", "#303030"], // neutral-200, neutral-500
+  "bg-translucence-1": ["rgba(0,0,0,0.25)", "rgba(255,255,255,0.25)"],
+  "bg-translucence-2": ["rgba(0,0,0,0.5)", "rgba(255,255,255,0.5)"],
+  "bg-translucence-3": ["rgba(0,0,0,0.75)", "rgba(255,255,255,0.75)"],
   "on-bg-1": ["#404040", "#f5f5f5"], // neutral-700, neutral-100
   "on-bg-2": ["#737373", "#d4d4d4"], // neutral-500, neutral-300
   "on-bg-3": ["#d4d4d4", "#737373"], // neutral-300, neutral-500

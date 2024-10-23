@@ -1,9 +1,9 @@
-import {
-  WorkerHandler,
-  WorkerProxy,
-  CarrierProxy,
-} from "src/worker-handler/main";
-// import { WorkerHandler, WorkerProxy, CarrierProxy } from "worker-handler";
+// import {
+//   WorkerHandler,
+//   WorkerProxy,
+//   CarrierProxy,
+// } from "src/worker-handler/main";
+import { WorkerHandler, WorkerProxy, CarrierProxy } from "worker-handler";
 import { PdfWorkerActions } from "./pdf.worker";
 import workerUrl from "./pdf.worker.ts?worker&url";
 

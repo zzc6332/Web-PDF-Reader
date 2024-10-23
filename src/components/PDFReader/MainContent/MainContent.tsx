@@ -22,7 +22,10 @@ export default memo(function MainContent({
   );
 
   const isThumbsVisible = usePdfReaderStore((s) => s.isThumbsVisible);
+  const pdfCacheId = usePdfReaderStore((s) => s.pdfCacheId);
+  const setPdfSrc = usePdfReaderStore((s) => s.setPdfSrc);
 
+  // 控制缩略图侧边栏的显示与隐藏
   useEffect(() => {
     const sideSheetEl = sideSheetElRef.current!;
     const width = getContainerWidthRef.current!.getContainerWidth();
@@ -32,6 +35,13 @@ export default memo(function MainContent({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isThumbsVisible, isPdfActive]);
+
+  // 刷新时如果 pdf 处于打开状态，那么刷新完成后从 indexedDB 中获取它
+  useEffect(() => {
+    if (!isPdfActive) return;
+    setPdfSrc(pdfCacheId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className={"flex" + " " + className}>
@@ -47,11 +57,7 @@ export default memo(function MainContent({
           className="float-right"
         />
       </div>
-      {isPdfActive ? (
-        <DocumentContainer className="flex-auto" />
-      ) : (
-        <Selector />
-      )}
+      {isPdfActive ? <DocumentContainer className="flex-auto" /> : <Selector />}
     </div>
   );
 });

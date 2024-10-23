@@ -6,7 +6,7 @@ import {
 import { create } from "zustand";
 import { EventEmitter } from "events";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { pdfWorker, WorkerProxy } from "../workers/pdf.main";
+import { pdfWorker, WorkerProxy } from "src/workers/pdf.main";
 
 //#region - 工具函数
 
@@ -32,15 +32,16 @@ const domState = {
   documentContainer: null as HTMLDivElement | null,
 };
 
-const renderState = {
+const loadingState = {
   pages: [] as {
     width: number;
     height: number;
     proxy: WorkerProxy<PDFPageProxy>;
   }[],
   // pdfSrc: "http://192.168.6.2:5173/statics/0.pdf" as null | string | Blob,
-  pdfSrc: null as null | string | Blob,
+  // pdfSrc: null as null | string | Blob,
   isPdfActive: false,
+  pdfCacheId: null as null | number,
 };
 
 const workerState = {
@@ -92,6 +93,8 @@ interface EventHandlers {
     number | null | undefined
   ];
   enableRerenderOnScroll: [];
+  onLoadingSucsess: [];
+  onLoadingError: [];
 }
 
 type Emitter = {
@@ -99,7 +102,7 @@ type Emitter = {
 };
 
 type DomState = typeof domState;
-type RenderState = typeof renderState;
+type LoadingState = typeof loadingState;
 type ScaleState = typeof scaleState;
 type PageNumState = typeof pageNumState;
 type LayoutState = typeof layoutState;
@@ -112,7 +115,7 @@ type WorkerState = typeof workerState;
 
 type ResetStateActions = {
   resetDomState: () => void;
-  resetRenderState: () => void;
+  resetLoadingState: () => void;
   resetScaleState: () => void;
   resetPageNumState: () => void;
   resetLayoutState: () => void;
@@ -120,13 +123,15 @@ type ResetStateActions = {
 };
 
 type WorkerActions = {
-  loadWorkerProxies: (src: string | Blob) => Promise<void>;
+  loadWorkerProxies: (src: string | File | number) => Promise<void>;
 };
 
 type InitialActions = {
   specifyDocumentContainer: (documentContainer: HTMLDivElement | null) => void;
-  setPdfSrc: (pdfSrc: null | string | Blob) => void;
-  setIsPdfActive: (isPdfActive: boolean) => void;
+};
+
+type loadingActions = {
+  setPdfSrc: (pdfSrc: null | string | File | number) => void; // 如果 pdfSrc 是 number 类型的话那么它就是 pdfCacheId
 };
 
 type ScaleActions = {
@@ -199,7 +204,8 @@ const usePdfReaderStore = create<
   Emitter &
     ResetStateActions &
     DomState &
-    RenderState &
+    LoadingState &
+    loadingActions &
     InitialActions &
     ScaleState &
     ScaleActions &
@@ -216,7 +222,7 @@ const usePdfReaderStore = create<
     (set, get) => ({
       emitter: new EventEmitter<EventHandlers>(),
       ...domState,
-      ...renderState,
+      ...loadingState,
       ...scaleState,
       ...pageNumState,
       ...layoutState,
@@ -229,8 +235,8 @@ const usePdfReaderStore = create<
       resetDomState: () => {
         set(domState);
       },
-      resetRenderState: () => {
-        set(renderState);
+      resetLoadingState: () => {
+        set(loadingState);
       },
       resetScaleState: () => {
         set(pageNumState);
@@ -249,30 +255,42 @@ const usePdfReaderStore = create<
       //#region - WorkerActions
 
       loadWorkerProxies: async (src) => {
-        const { data } = await pdfWorker.execute("load", [], src).promise;
-        const loadingTaskWP = await data.pdfDocumentLoadingTask;
-        const pdfDocumentWP = await data.pdfDocumentProxy;
-        const pagesWP = await data.pdfPageProxies;
-        // 设置 WorkerState 中的状态
-        set({
-          loadingTaskWP,
-          pdfDocumentWP,
-          pagesWP,
-        });
-        // 将一些状态同步到主线程中
-        const pages = [];
-        for await (const pageWP of pagesWP) {
-          const viewPort = await pageWP.getViewport({
-            scale: 1,
-          });
-          const page = {
-            width: await viewPort.width,
-            height: await viewPort.height,
-            proxy: pageWP,
-          };
-          pages.push(page);
+        const { emitter } = get();
+        try {
+          const { data: pdfCacheId } = await pdfWorker
+            .execute("load", [], src)
+            .addEventListener("message", async (res) => {
+              const data = res.data;
+              const loadingTaskWP = await data.pdfDocumentLoadingTask;
+              const pdfDocumentWP = await data.pdfDocumentProxy;
+              const pagesWP = await data.pdfPageProxies;
+              // 设置 WorkerState 中的状态
+              set({
+                loadingTaskWP,
+                pdfDocumentWP,
+                pagesWP,
+              });
+              // 将一些状态同步到主线程中
+              const pages = [];
+              for await (const pageWP of pagesWP) {
+                const viewPort = await pageWP.getViewport({
+                  scale: 1,
+                });
+                const page = {
+                  width: await viewPort.width,
+                  height: await viewPort.height,
+                  proxy: pageWP,
+                };
+                pages.push(page);
+              }
+              set({ pages, isPdfActive: true });
+              emitter.emit("onLoadingSucsess");
+            }).promise;
+          set({ pdfCacheId });
+        } catch (error) {
+          console.error(error);
+          emitter.emit("onLoadingError");
         }
-        set({ pages, isPdfActive: true });
       },
 
       //#endregion
@@ -285,16 +303,11 @@ const usePdfReaderStore = create<
       },
 
       setPdfSrc: (pdfSrc) => {
-        set({ pdfSrc });
         if (pdfSrc) {
           get().loadWorkerProxies(pdfSrc);
         } else {
-          set({ isPdfActive: false });
+          set({ isPdfActive: false, pdfCacheId: null });
         }
-      },
-
-      setIsPdfActive: (isPdfActive) => {
-        set({ isPdfActive });
       },
 
       //#endregion
@@ -667,8 +680,24 @@ const usePdfReaderStore = create<
       name: "pdf-state",
       storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => {
-        const { scale, viewScale, scrollX, scrollY, isThumbsVisible } = state;
-        return { scale, viewScale, scrollX, scrollY, isThumbsVisible };
+        const {
+          scale,
+          viewScale,
+          scrollX,
+          scrollY,
+          isThumbsVisible,
+          isPdfActive,
+          pdfCacheId,
+        } = state;
+        return {
+          scale,
+          viewScale,
+          scrollX,
+          scrollY,
+          isThumbsVisible,
+          isPdfActive,
+          pdfCacheId,
+        };
       },
     }
   )

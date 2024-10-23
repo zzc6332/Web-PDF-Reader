@@ -121,7 +121,6 @@ export default memo(function DocumentContainer({
       _scaleOriginLeft?: number | null,
       _scaleOriginTop?: number | null
     ) => {
-      console.log("onViewScale");
       const { clientWidth, clientHeight } = documentContainer;
 
       preScrollLeft = scrollLeft;
@@ -446,7 +445,7 @@ export default memo(function DocumentContainer({
   );
   const updateScroll = debounce(
     usePdfReaderStore((s) => s.updateScroll),
-    500
+    200
   );
 
   const getSafeScaleValue = usePdfReaderStore((s) => s.getSafeScaleValue);
