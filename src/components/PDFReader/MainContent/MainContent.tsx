@@ -3,12 +3,12 @@ import DocumentContainer from "./DocumentContainer";
 import ThumbnailsContainer from "./ThumbnailsContainer";
 import Props from "src/types/props";
 import usePdfReaderStore from "src/stores/usePdfReaderStore";
-import Selector from "./Selector";
 
 interface DocumentLoadingProps extends Props {}
 
 export default memo(function MainContent({
   className: classNameProp,
+  style: styleProp,
 }: DocumentLoadingProps) {
   const className = classNameProp || "";
 
@@ -38,16 +38,16 @@ export default memo(function MainContent({
 
   // 刷新时如果 pdf 处于打开状态，那么刷新完成后从 indexedDB 中获取它
   useEffect(() => {
-    if (!isPdfActive) return;
+    if (!isPdfActive || !pdfCacheId) return;
     setPdfSrc(pdfCacheId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div className={"flex" + " " + className}>
+    <div className={"flex" + " " + className} style={styleProp}>
       <div
         ref={sideSheetElRef}
-        className="flex-none transition-width"
+        className="z-1 flex-none transition-width outline-l1"
         style={{
           transition: "width ease-out 180ms",
         }}
@@ -57,7 +57,7 @@ export default memo(function MainContent({
           className="float-right"
         />
       </div>
-      {isPdfActive ? <DocumentContainer className="flex-auto" /> : <Selector />}
+      <DocumentContainer className="flex-auto" />
     </div>
   );
 });

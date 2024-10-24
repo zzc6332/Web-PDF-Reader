@@ -12,9 +12,3 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <App />
   // </React.StrictMode>
 );
-
-window.onload = () => {
-  document.addEventListener("gesturestart", (e) => {
-    console.log(e);
-  });
-};

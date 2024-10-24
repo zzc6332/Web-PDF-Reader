@@ -32,5 +32,6 @@
     "src/workers/pdf.worker.ts",
     "src/worker-handler/worker.ts/",
     "src/vite-env.d.ts",
+    "src/utils"
   ]
 }

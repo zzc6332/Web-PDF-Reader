@@ -39,9 +39,14 @@ const loadingState = {
     proxy: WorkerProxy<PDFPageProxy>;
   }[],
   // pdfSrc: "http://192.168.6.2:5173/statics/0.pdf" as null | string | Blob,
-  // pdfSrc: null as null | string | Blob,
   isPdfActive: false,
+  isLoading: false,
   pdfCacheId: null as null | number,
+  // 这里的 thumbWidth 和 thumbHeight 并不是侧边栏中的缩略图，而是历史记录中的封面缩略图
+  thumbSize: {
+    width: 140,
+    height: 198,
+  },
 };
 
 const workerState = {
@@ -74,8 +79,9 @@ const layoutState = {
   scrollY: 0,
 };
 
-const thumbsState = {
+const displayState = {
   isThumbsVisible: true,
+  showHistory: true,
 };
 
 //#endregion
@@ -106,7 +112,7 @@ type LoadingState = typeof loadingState;
 type ScaleState = typeof scaleState;
 type PageNumState = typeof pageNumState;
 type LayoutState = typeof layoutState;
-type ThumbsState = typeof thumbsState;
+type DisplayState = typeof displayState;
 type WorkerState = typeof workerState;
 
 //#endregion
@@ -132,6 +138,7 @@ type InitialActions = {
 
 type loadingActions = {
   setPdfSrc: (pdfSrc: null | string | File | number) => void; // 如果 pdfSrc 是 number 类型的话那么它就是 pdfCacheId
+  setIsLoading: (isLoading: boolean) => void;
 };
 
 type ScaleActions = {
@@ -165,8 +172,9 @@ type ScaleActions = {
   getSafeScaleValue: (n: number) => number;
 };
 
-type ThumbsActions = {
+type DisplayActions = {
   setIsThumbsVisible: (isThumbsVisible: boolean) => void;
+  setShowHistory: (showHistory: boolean) => void;
 };
 
 interface PageNumOptions {
@@ -213,8 +221,8 @@ const usePdfReaderStore = create<
     PageNumActions &
     LayoutState &
     LayoutActions &
-    ThumbsState &
-    ThumbsActions &
+    DisplayState &
+    DisplayActions &
     WorkerState &
     WorkerActions
 >()(
@@ -226,7 +234,7 @@ const usePdfReaderStore = create<
       ...scaleState,
       ...pageNumState,
       ...layoutState,
-      ...thumbsState,
+      ...displayState,
       ...workerState,
 
       //#region - 定义 actions
@@ -256,9 +264,10 @@ const usePdfReaderStore = create<
 
       loadWorkerProxies: async (src) => {
         const { emitter } = get();
+        const { thumbSize } = get();
         try {
           const { data: pdfCacheId } = await pdfWorker
-            .execute("load", [], src)
+            .execute("load", [], src, thumbSize)
             .addEventListener("message", async (res) => {
               const data = res.data;
               const loadingTaskWP = await data.pdfDocumentLoadingTask;
@@ -303,11 +312,15 @@ const usePdfReaderStore = create<
       },
 
       setPdfSrc: (pdfSrc) => {
-        if (pdfSrc) {
+        if (pdfSrc || pdfSrc === 0) {
           get().loadWorkerProxies(pdfSrc);
         } else {
           set({ isPdfActive: false, pdfCacheId: null });
         }
+      },
+
+      setIsLoading: (isLoading) => {
+        set({ isLoading });
       },
 
       //#endregion
@@ -668,10 +681,16 @@ const usePdfReaderStore = create<
 
       //#endregion
 
-      //#region - thumbsActions
+      //#region - displayActions
+
       setIsThumbsVisible: (isThumbsVisible) => {
         set({ isThumbsVisible });
       },
+
+      setShowHistory: (showHistory) => {
+        set({ showHistory });
+      },
+
       //#endregion
 
       //#endregion
@@ -688,6 +707,7 @@ const usePdfReaderStore = create<
           isThumbsVisible,
           isPdfActive,
           pdfCacheId,
+          showHistory,
         } = state;
         return {
           scale,
@@ -697,6 +717,7 @@ const usePdfReaderStore = create<
           isThumbsVisible,
           isPdfActive,
           pdfCacheId,
+          showHistory,
         };
       },
     }

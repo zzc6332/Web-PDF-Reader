@@ -26,6 +26,8 @@ export default memo(function ToolBar(props: ToolBarProps) {
   const isThumbsVisible = usePdfReaderStore((s) => s.isThumbsVisible);
   const setPdfSrc = usePdfReaderStore((s) => s.setPdfSrc);
   const isPdfActive = usePdfReaderStore((s) => s.isPdfActive);
+  const showHistory = usePdfReaderStore((s) => s.showHistory);
+  const setShowHistory = usePdfReaderStore((s) => s.setShowHistory);
 
   const themeButton = (
     <div className="ml-2">
@@ -55,9 +57,10 @@ export default memo(function ToolBar(props: ToolBarProps) {
       />
     </div>
   );
+
   return (
     <div
-      className={"relative h-12 w-full bg-bg-2 z-1 outline-l1 " + className}
+      className={"relative h-12 w-full bg-bg-2 z-2 outline-l1 " + className}
       style={{ boxShadow: "0 1px 8px rgb(0 0 0 / 0.05)" }}
     >
       {isPdfActive ? (
@@ -120,6 +123,28 @@ export default memo(function ToolBar(props: ToolBarProps) {
         </>
       ) : (
         <>
+          <div className="absolute left-2 top-0 h-full flex items-center">
+            <ToggleButton
+              checkedContent={
+                <Icon
+                  type="#icon-history"
+                  size="1.25rem"
+                  color={colors["on-pri-1"]}
+                />
+              }
+              uncheckedContent={
+                <Icon
+                  type="#icon-history"
+                  size="1.25rem"
+                  color={colors["on-bg-2"]}
+                />
+              }
+              value={showHistory}
+              onToggle={(isChecked) => {
+                setShowHistory(isChecked);
+              }}
+            />
+          </div>
           <div className="absolute right-2 top-0 h-full flex items-center">
             {themeButton}
           </div>

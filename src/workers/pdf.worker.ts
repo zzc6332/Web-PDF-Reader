@@ -13,6 +13,13 @@ import {
 // import { ActionResult, createOnmessage } from "src/worker-handler/worker";
 import { ActionResult, createOnmessage } from "worker-handler/worker";
 
+import { onupgradeneeded } from "src/utils/indexedDB";
+
+//#region - 调试用
+const storeAll = false; // 是否存储所有打开的文件，无论是否已缓存
+const storeThumb = true; // 是否缓存缩略图
+//#endregion
+
 //#region - 指定 workerPort
 // 在 web worker 中，pdfjs 通过设置 workerPort 的方式来指定它的 pdf.worker.js
 const worker = new Worker(workerSrc, { type: "module" });
@@ -28,10 +35,16 @@ let pdfPageProxies: PDFPageProxy[];
 const currentRenderTasks = new Set<RenderTask>();
 
 // 这里 blob 和 arrayBuffer 是给 pdfjs 用的，cacheData.buffer 用来存入 indexedDB 的，不能混用，因为 pdfjs 会把 buffer 转移到另一个 worker 线程中，而无法再存入 indexedDB
-type CacheData = { thumb?: ImageBitmap; size: number; buffer: ArrayBuffer } & (
+type CacheData = {
+  size: number;
+  buffer: ArrayBuffer;
+  lastAccessed?: number;
+  thumb?: ImageBitmap;
+} & (
   | { type: "url"; url: string; name: string; lastModified?: number }
   | { type: "local"; name: string; lastModified: number; url?: string }
 );
+export type CacheDataWithId = CacheData & { id: number };
 let blob: Blob;
 let cacheData: CacheData;
 // arrayBUffer 用来存储从 cache 中取出的 arrayBuffer，该 cache 的 ID 存在 cacheId 中，cacheId 和 arrayBuffer 状态一定绑定，isCache 为 true，那么 arrayBuffer 就有值，否则为 null
@@ -50,7 +63,8 @@ export type PdfWorkerActions = {
       pdfDocumentProxy: PDFDocumentProxy;
       pdfPageProxies: PDFPageProxy[];
     },
-    src: string | URL | File | number
+    src: string | URL | File | number,
+    thumbSize: { width: number; height: number }
   ) => ActionResult<number>;
   renderPages: (
     pageSizeMap: Map<number, [number, number, number]>, // 元组中的三项分别代表 width、heigh、scale
@@ -76,7 +90,7 @@ onmessage = createOnmessage<PdfWorkerActions>({
         // 提取下文件名
         const reg = /\/([^/?#]+)$/;
         const match = url.match(reg);
-        const name = match ? match[1] || url : url;
+        const name = (match ? match[1] || url : url).replace(/\.pdf$/i, "");
         // 检测下是否已有对应 url 的缓存文件
         const bufferFromCache = await getBufferByUrl(url);
         if (bufferFromCache) {
@@ -101,9 +115,8 @@ onmessage = createOnmessage<PdfWorkerActions>({
       } else {
         // 是 File 的情况
         // 检测下缓存中是否已有对应的文件
-        // const bufferFromCache = await getBufferByFileInfo(src);
         const bufferFromCache = await getBufferByFileInfo(src);
-        if (bufferFromCache) {
+        if (bufferFromCache && !storeAll) {
           // console.log("local cache");
           arrayBuffer = bufferFromCache[0];
           cacheId = bufferFromCache[1];
@@ -144,7 +157,7 @@ onmessage = createOnmessage<PdfWorkerActions>({
     return pdfPageProxies;
   },
   // load 是入口 Action，接收 pdfSrc，获取到 pdfDocumentProxy 和 pdfPageProxies，并将 pdf 的总页数传递给 Main
-  async load(src) {
+  async load(src, thumbSize) {
     await this.init(src);
     await this.loadDocument();
     await this.loadPages();
@@ -156,7 +169,10 @@ onmessage = createOnmessage<PdfWorkerActions>({
         pdfPageProxies: PDFPageProxy[];
       }
     );
-    // 如果加载成功了，那么将 blob 存入 indexedDB 中
+
+    // 如果还没被缓存过，则生成首页缩略图后将文件存入 indexedDB 中，否则传回 cachedId
+    if (!cacheId && storeThumb)
+      cacheData.thumb = await getThumb(pdfPageProxies[0], thumbSize);
     this.$end(cacheId || (await storeBuffer(cacheData)));
   },
 
@@ -210,10 +226,8 @@ onmessage = createOnmessage<PdfWorkerActions>({
         this.$end([0, true, null]);
       })
       .catch(() => {});
-    setTimeout(() => {
-      // console.log(currentRenderTasks);
-    }, 2000);
   },
+
   async cancelRenders() {
     currentRenderTasks.forEach((renderTask) => {
       renderTask.cancel();
@@ -260,19 +274,6 @@ function compareBuffers(arrayBuffer1: ArrayBuffer, arrayBuffer2: ArrayBuffer) {
       (value, index) => value === new Uint8Array(arrayBuffer2)[index]
     )
   );
-}
-
-function onupgradeneeded(e: IDBVersionChangeEvent) {
-  const db = (e.target as IDBRequest).result as IDBDatabase;
-
-  const objectStore = db.createObjectStore("pdf_buffer", {
-    keyPath: "id",
-    autoIncrement: true,
-  });
-
-  objectStore.createIndex("name", "name", { unique: false });
-  objectStore.createIndex("url", "url", { unique: true });
-  objectStore.createIndex("size", "size", { unique: false });
 }
 
 // 通过缓存 ID 获取 PDF 文件
@@ -339,6 +340,7 @@ function getBufferByFileInfo(file: File) {
     request.onerror = (error) => {
       reject(error);
     };
+
     request.onsuccess = (e) => {
       const db = (e.target as IDBRequest).result as IDBDatabase;
       db.onerror = (error) => {
@@ -352,9 +354,10 @@ function getBufferByFileInfo(file: File) {
       request.onsuccess = (e) => {
         const cursor = (e.target as IDBRequest).result as IDBCursorWithValue;
         if (cursor) {
-          // 找到 name 和 lastModified 都一样的
+          // 找到 name、size、lastModified 都一样的
           if (
             cursor.value.name === file.name &&
+            cursor.value.size === file.size &&
             cursor.value?.lastModified === file.lastModified
           ) {
             resolve([cursor.value.buffer, cursor.value.id]);
@@ -369,7 +372,32 @@ function getBufferByFileInfo(file: File) {
   });
 }
 
-function storeBuffer(cachedata: CacheData) {
+async function getThumb(
+  page: PDFPageProxy | undefined,
+  { width, height }: { width: number; height: number }
+) {
+  if (!page) return;
+
+  const { width: ogWidth, height: ogHeight } = page.getViewport({
+    scale: 1,
+  });
+
+  const scale = Math.min(width / ogWidth, height / ogHeight);
+  const viewport = page.getViewport({
+    scale,
+  });
+
+  const canvas = new OffscreenCanvas(viewport.width, viewport.height);
+  const renderTask = page.render({
+    canvasContext: canvas.getContext("2d"),
+    viewport,
+  });
+
+  await renderTask.promise;
+  return canvas.transferToImageBitmap();
+}
+
+function storeBuffer(cacheData: CacheData) {
   return new Promise<number>((resolve, reject) => {
     const request = indexedDB.open("pdf_cache");
 
@@ -391,49 +419,55 @@ function storeBuffer(cachedata: CacheData) {
       const objectStore = db
         .transaction(["pdf_buffer"], "readwrite")
         .objectStore("pdf_buffer");
-      const request = objectStore.openCursor();
 
-      request.onsuccess = (e) => {
-        const cursor = (e.target as IDBRequest).result as IDBCursorWithValue;
-        if (cursor) {
-          // 先找到大小一样的，再比较是否相同
-          if (cursor.value.size === cachedata.size) {
-            if (compareBuffers(cursor.value.buffer, cachedata.buffer)) {
-              // 如果存在相同的文件则直接返回 cacheId
-              resolve(cursor.primaryKey as number);
-              // 如果当前的 buffer 来自 url，而 cache 中的来自 local，那么为 cacheData 添加 url 字段，好让下次通过该 url 访问时可以直接用到缓存
-              if (cachedata.type === "url" && cursor.value.type === "local") {
-                const newCacheData = {
-                  ...cursor.value,
-                  url: cachedata.url,
-                };
-                objectStore.put(newCacheData);
-                // 如果当前的 buffer 来自 local，而 cache 中的来自 url，那么为 cacheData 修正 name 字段，添加 lastModified 字段，好让下次通过该文件访问时可以直接用到缓存
-              } else if (
-                cachedata.type === "local" &&
-                cursor.value.type === "url"
-              ) {
-                const newCacheData = {
-                  ...cursor.value,
-                  name: cachedata.name,
-                  lastModified: cachedata.lastModified,
-                };
-                objectStore.put(newCacheData);
+      if (!storeAll) {
+        const request = objectStore.openCursor();
+        request.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest).result as IDBCursorWithValue;
+          if (cursor) {
+            // 先找到大小一样的，再比较是否相同
+            if (cursor.value.size === cacheData.size) {
+              if (compareBuffers(cursor.value.buffer, cacheData.buffer)) {
+                // 如果存在相同的文件则直接返回 cacheId
+                // resolve(cursor.primaryKey as number);
+                // 如果当前的 buffer 来自 url，而 cache 中的来自 local，那么为 cacheData 添加 url 字段，好让下次通过该 url 访问时可以直接用到缓存
+                if (cacheData.type === "url" && cursor.value.type === "local") {
+                  const newCacheData = {
+                    ...cursor.value,
+                    url: cacheData.url,
+                  };
+                  objectStore.put(newCacheData);
+                  // 如果当前的 buffer 来自 local，而 cache 中的来自 url，那么为 cacheData 修正 name 字段，添加 lastModified 字段，好让下次通过该文件访问时可以直接用到缓存
+                } else if (
+                  cacheData.type === "local" &&
+                  cursor.value.type === "url"
+                ) {
+                  const newCacheData = {
+                    ...cursor.value,
+                    name: cacheData.name,
+                    lastModified: cacheData.lastModified,
+                  };
+                  objectStore.put(newCacheData);
+                }
+                // return;
+              } else {
+                cursor.continue();
               }
-              return;
             } else {
               cursor.continue();
             }
           } else {
-            cursor.continue();
+            // 遍历完后如果没有相同的文件的则存储 buffer 后返回新的 cacheId
+            objectStore.add(cacheData).onsuccess = (e) => {
+              resolve((e.target as IDBRequest).result as number);
+            };
           }
-        } else {
-          // 遍历完后如果没有相同的文件的则存储 buffer 后返回新的 cacheId
-          objectStore.add(cachedata).onsuccess = (e) => {
-            resolve((e.target as IDBRequest).result as number);
-          };
-        }
-      };
+        };
+      } else {
+        objectStore.add(cacheData).onsuccess = (e) => {
+          resolve((e.target as IDBRequest).result as number);
+        };
+      }
     };
   });
 }

@@ -80,11 +80,11 @@ const ThumbnailsContainer = memo(
             if (isDone) {
               const pageIndex = pageNum - 1;
               const thumbCanvasEl = thumbCanvasElsRef.current[pageIndex];
-              if (!thumbCanvasEl) return;
+              const thumbCanvasContainerEl =
+                thumbCanvasContainerElsRef.current[pageIndex];
+              if (!thumbCanvasEl || !thumbCanvasContainerEl) return;
               thumbCanvasEl.getContext("2d")?.drawImage(imageBitmap!, 0, 0);
-              thumbCanvasContainerElsRef.current[pageIndex]!.replaceChildren(
-                thumbCanvasEl
-              );
+              thumbCanvasContainerEl.replaceChildren(thumbCanvasEl);
             }
           });
       }

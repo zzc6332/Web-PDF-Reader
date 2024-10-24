@@ -10,6 +10,7 @@ interface DocumentContainerProps extends Props {}
 
 export default memo(function DocumentContainer({
   className: classNameProp,
+  style: styleProp,
 }: DocumentContainerProps) {
   const className = classNameProp || "";
 
@@ -572,6 +573,7 @@ export default memo(function DocumentContainer({
         " " +
         "relative size-full overflow-auto bg-bg-3 box-border focus:outline-none "
       }
+      style={styleProp}
       tabIndex={0}
       onScroll={(e) => {
         updateCurrentPageNum();
