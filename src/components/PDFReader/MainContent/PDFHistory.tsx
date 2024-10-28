@@ -281,7 +281,7 @@ export default memo(function PDFHistory({
       {items}
       <Modal
         visible={modalVisible}
-        title={"是否要删除选中内容"}
+        title={"是否要删除选中记录"}
         onOk={() => {
           deleteSelected();
           setModalVisible(false);
