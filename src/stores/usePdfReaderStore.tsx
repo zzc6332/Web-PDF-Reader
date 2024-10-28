@@ -49,12 +49,6 @@ const loadingState = {
   },
 };
 
-const workerState = {
-  pagesWP: null as WorkerProxy<PDFPageProxy[]> | null,
-  pdfDocumentWP: null as WorkerProxy<PDFDocumentProxy> | null,
-  loadingTaskWP: null as WorkerProxy<PDFDocumentLoadingTask> | null,
-};
-
 const scaleState = {
   scale: 1,
   viewScale: 1,
@@ -82,6 +76,8 @@ const layoutState = {
 const displayState = {
   isThumbsVisible: true,
   showHistory: true,
+  historySelectMode: false,
+  checkAll: 0 as 0 | 1 | -1, // 0 代表全不选，1 代表全选，-1 代表非全选
 };
 
 //#endregion
@@ -101,6 +97,7 @@ interface EventHandlers {
   enableRerenderOnScroll: [];
   onLoadingSucsess: [];
   onLoadingError: [];
+  deleteCache: [];
 }
 
 type Emitter = {
@@ -113,7 +110,6 @@ type ScaleState = typeof scaleState;
 type PageNumState = typeof pageNumState;
 type LayoutState = typeof layoutState;
 type DisplayState = typeof displayState;
-type WorkerState = typeof workerState;
 
 //#endregion
 
@@ -125,11 +121,6 @@ type ResetStateActions = {
   resetScaleState: () => void;
   resetPageNumState: () => void;
   resetLayoutState: () => void;
-  resetWorkerState: () => void;
-};
-
-type WorkerActions = {
-  loadWorkerProxies: (src: string | File | number) => Promise<void>;
 };
 
 type InitialActions = {
@@ -139,6 +130,7 @@ type InitialActions = {
 type loadingActions = {
   setPdfSrc: (pdfSrc: null | string | File | number) => void; // 如果 pdfSrc 是 number 类型的话那么它就是 pdfCacheId
   setIsLoading: (isLoading: boolean) => void;
+  loadWorkerProxies: (src: string | File | number) => Promise<void>;
 };
 
 type ScaleActions = {
@@ -175,6 +167,8 @@ type ScaleActions = {
 type DisplayActions = {
   setIsThumbsVisible: (isThumbsVisible: boolean) => void;
   setShowHistory: (showHistory: boolean) => void;
+  setHistorySelectMode: (historySelectMode: boolean) => void;
+  setCheckAll: (checkAll: 0 | 1 | -1) => void;
 };
 
 interface PageNumOptions {
@@ -222,9 +216,7 @@ const usePdfReaderStore = create<
     LayoutState &
     LayoutActions &
     DisplayState &
-    DisplayActions &
-    WorkerState &
-    WorkerActions
+    DisplayActions
 >()(
   persist(
     (set, get) => ({
@@ -235,7 +227,6 @@ const usePdfReaderStore = create<
       ...pageNumState,
       ...layoutState,
       ...displayState,
-      ...workerState,
 
       //#region - 定义 actions
 
@@ -255,12 +246,27 @@ const usePdfReaderStore = create<
       resetLayoutState: () => {
         set(pageNumState);
       },
-      resetWorkerState: () => {
-        set(workerState);
-      },
+
       //#endregion
 
-      //#region - WorkerActions
+      //#region - loadingActions
+
+      // specifyDocumentContainer 用于指定 documentContainer 的 DOM 元素
+      specifyDocumentContainer: (documentContainer) => {
+        set({ documentContainer });
+      },
+
+      setPdfSrc: (pdfSrc) => {
+        if (pdfSrc || pdfSrc === 0) {
+          get().loadWorkerProxies(pdfSrc);
+        } else {
+          set({ isPdfActive: false, pdfCacheId: null });
+        }
+      },
+
+      setIsLoading: (isLoading) => {
+        set({ isLoading });
+      },
 
       loadWorkerProxies: async (src) => {
         const { emitter } = get();
@@ -270,15 +276,7 @@ const usePdfReaderStore = create<
             .execute("load", [], src, thumbSize)
             .addEventListener("message", async (res) => {
               const data = res.data;
-              const loadingTaskWP = await data.pdfDocumentLoadingTask;
-              const pdfDocumentWP = await data.pdfDocumentProxy;
               const pagesWP = await data.pdfPageProxies;
-              // 设置 WorkerState 中的状态
-              set({
-                loadingTaskWP,
-                pdfDocumentWP,
-                pagesWP,
-              });
               // 将一些状态同步到主线程中
               const pages = [];
               for await (const pageWP of pagesWP) {
@@ -300,27 +298,6 @@ const usePdfReaderStore = create<
           console.error(error);
           emitter.emit("onLoadingError");
         }
-      },
-
-      //#endregion
-
-      //#region - initialActions
-
-      // specifyDocumentContainer 用于指定 documentContainer 的 DOM 元素
-      specifyDocumentContainer: (documentContainer) => {
-        set({ documentContainer });
-      },
-
-      setPdfSrc: (pdfSrc) => {
-        if (pdfSrc || pdfSrc === 0) {
-          get().loadWorkerProxies(pdfSrc);
-        } else {
-          set({ isPdfActive: false, pdfCacheId: null });
-        }
-      },
-
-      setIsLoading: (isLoading) => {
-        set({ isLoading });
       },
 
       //#endregion
@@ -688,7 +665,15 @@ const usePdfReaderStore = create<
       },
 
       setShowHistory: (showHistory) => {
-        set({ showHistory });
+        set({ showHistory, historySelectMode: false });
+      },
+
+      setHistorySelectMode: (historySelectMode) => {
+        set({ historySelectMode });
+      },
+
+      setCheckAll: (checkAll) => {
+        set({ checkAll });
       },
 
       //#endregion
