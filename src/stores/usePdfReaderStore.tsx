@@ -1,8 +1,4 @@
-import {
-  PDFDocumentLoadingTask,
-  PDFDocumentProxy,
-  PDFPageProxy,
-} from "pdfjs-dist";
+import { PDFPageProxy } from "pdfjs-dist";
 import { create } from "zustand";
 import { EventEmitter } from "events";
 import { persist, createJSONStorage } from "zustand/middleware";

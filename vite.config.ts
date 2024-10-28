@@ -5,6 +5,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import topLevelAwait from "vite-plugin-top-level-await";
 // import SemiPlugin from "vite-plugin-semi-theme";
 import SemiPlugin from "./vite-plugins/vite-plugin-semi-theme";
+import checker from "vite-plugin-checker";
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -20,9 +21,15 @@ export default defineConfig({
   },
   worker: {
     format: "es",
+    rollupOptions: {
+      output: {
+        dir: "./dist/worker",
+      },
+    },
   },
   assetsInclude: ["./statics/*"],
   plugins: [
+    checker({ typescript: false }),
     UnoCSS({
       configFile: "./uno.config.ts",
     }),

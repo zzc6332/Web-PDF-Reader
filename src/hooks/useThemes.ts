@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
+import useThemeStore from "src/stores/useThemeStore";
 
-export default function useThemes(
-  colorsList: { [key: string]: string[] },
-  themeIndex: number
-) {
+export default function useThemes(colorsList: { [key: string]: string[] }) {
   const { style } = document.documentElement;
 
   const [isMounted, setIsmounted] = useState(false);
+
+  const setSemiTheme = useThemeStore((s) => s.setSemiTheme);
+  const themeIndex = useThemeStore((s) => s.themeIndex);
+
+  useEffect(() => {
+    setSemiTheme(themeIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     for (const colorName in colorsList) {

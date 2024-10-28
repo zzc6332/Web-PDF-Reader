@@ -13,7 +13,20 @@ import {
 // import { ActionResult, createOnmessage } from "src/worker-handler/worker";
 import { ActionResult, createOnmessage } from "worker-handler/worker";
 
-import { onupgradeneeded } from "src/utils/indexedDB";
+// import { onupgradeneeded } from "./indexedDB";
+
+function onupgradeneeded(e: IDBVersionChangeEvent) {
+  const db = (e.target as IDBRequest).result as IDBDatabase;
+
+  const objectStore = db.createObjectStore("pdf_buffer", {
+    keyPath: "id",
+    autoIncrement: true,
+  });
+
+  objectStore.createIndex("name", "name", { unique: false });
+  objectStore.createIndex("url", "url", { unique: true });
+  objectStore.createIndex("size", "size", { unique: false });
+}
 
 //#region - 调试用
 const storeAll = false; // 是否存储所有打开的文件，无论是否已缓存

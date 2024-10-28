@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2020",
+    "declaration": false,
     "useDefineForClassFields": true,
     "lib": [
       "ES2020",
@@ -29,14 +30,19 @@
     }
   },
   "include": [
-    "src"
+    "src/**/*",
+  ],
+  "exclude": [
+    "src/worker-handler/**/*",
+    "src/workers/pdf.worker.ts",
+    "src/utils/indexedDB.ts"
   ],
   "references": [
     {
-      "path": "./tsconfig.node.json",
+      "path": "./tsconfig.worker.json"
     },
     {
-      "path": "./tsconfig.worker.json"
+      "path": "./tsconfig.node.json",
     }
   ]
 }

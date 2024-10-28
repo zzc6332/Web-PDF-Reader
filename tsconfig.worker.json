@@ -2,6 +2,7 @@
   "compilerOptions": {
     "composite": true,
     "target": "ES2020",
+    "skipLibCheck": true,
     "useDefineForClassFields": true,
     "lib": [
       "ES2020",
@@ -10,7 +11,6 @@
       "Webworker.Iterable"
     ],
     "module": "ESNext",
-    "skipLibCheck": true,
     /* Bundler mode */
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
@@ -32,6 +32,5 @@
     "src/workers/pdf.worker.ts",
     "src/worker-handler/worker.ts/",
     "src/vite-env.d.ts",
-    "src/utils"
-  ]
+  ],
 }
