@@ -89,7 +89,11 @@ export default memo(function PDFHistory({
           .transaction(["pdf_buffer"])
           .objectStore("pdf_buffer")
           .getAll().onsuccess = (e) => {
-          setCacheDataList((e.target as IDBRequest).result.reverse());
+          setCacheDataList(
+            ((e.target as IDBRequest).result as CacheDataWithId[]).sort(
+              (a, b) => b.lastAccessed - a.lastAccessed
+            )
+          );
         };
       } catch (error) {
         error;
