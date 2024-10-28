@@ -25,6 +25,7 @@ export default memo(function PDFHistory({
   const setIsloading = usePdfReaderStore((s) => s.setIsLoading);
   const setShowHistory = usePdfReaderStore((s) => s.setShowHistory);
   const historySelectMode = usePdfReaderStore((s) => s.historySelectMode);
+  const setHistorySelectMode = usePdfReaderStore((s) => s.setHistorySelectMode);
   const checkAll = usePdfReaderStore((s) => s.checkAll);
   const setCheckAll = usePdfReaderStore((s) => s.setCheckAll);
 
@@ -134,9 +135,11 @@ export default memo(function PDFHistory({
         })
       );
       getCacheData();
+      setHistorySelectMode(false);
     } catch (error) {
       console.error(error);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteCacheData, getCacheData, selectedList]);
 
   useEffect(() => {
