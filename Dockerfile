@@ -16,7 +16,9 @@ RUN npm run build
 # production stage
 FROM nginx:stable as production-stage
 
-COPY --from=build-stage /app/dist /usr/share/nginx/html/pdf
+COPY --from=build-stage /app/dist /usr/share/nginx/html
+
+COPY --from=build-stage /app/statics /usr/share/nginx/html/statics
 
 COPY --from=build-stage /app/nginx.conf /etc/nginx/conf.d/default.conf
 

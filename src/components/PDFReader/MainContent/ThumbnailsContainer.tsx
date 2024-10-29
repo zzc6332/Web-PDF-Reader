@@ -150,7 +150,8 @@ const ThumbnailsContainer = memo(
         if (currentPageNum === 0) return;
 
         const pageIndex = currentPageNum - 1;
-        const thumb = thumbCanvasContainerElsRef.current[pageIndex]!;
+        const thumb = thumbCanvasContainerElsRef.current[pageIndex];
+        if (!thumb) return;
         const container = containerRef.current!;
         const thumbRect = thumb.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
