@@ -24,17 +24,21 @@ function parseSize(size: string) {
 
 //#region - 定义初始 state
 
-const domState = {
-  documentContainer: null as HTMLDivElement | null,
-};
-
-const loadingState = {
+const readerState = {
   pages: [] as {
     width: number;
     height: number;
     proxy: WorkerProxy<PDFPageProxy>;
   }[],
-  // pdfSrc: "http://192.168.6.2:5173/statics/0.pdf" as null | string | Blob,
+  scale: 1,
+  viewScale: 1,
+  // 这里的 scrollX、scrollY 仅用于持久化存储，使得刷新后读取之前的位置，其它需要用到 scrollX、scrollY 的地方要实时获取
+  scrollX: 0,
+  scrollY: 0,
+  documentContainer: null as HTMLDivElement | null,
+};
+
+const loadingState = {
   isPdfActive: false,
   isLoading: false,
   pdfCacheId: null as null | number,
@@ -46,8 +50,6 @@ const loadingState = {
 };
 
 const scaleState = {
-  scale: 1,
-  viewScale: 1,
   scaleMappingRatio: 4 / 3,
   viewScaleRange: [0.25, 3],
   // 定义最小的渲染 scale（对于 pdfjs 而言），避免页面过于缩小后突然放大导致画 面过于模糊
@@ -64,9 +66,6 @@ const pageNumState = {
 
 const layoutState = {
   padding: "0.5rem",
-  // 这里的 scrollX、scrollY 仅用于持久化存储，使得刷新后读取之前的位置，其它需要用到 scrollX、scrollY 的地方要实时获取
-  scrollX: 0,
-  scrollY: 0,
 };
 
 const displayState = {
@@ -100,23 +99,19 @@ type Emitter = {
   emitter: EventEmitter<EventHandlers>;
 };
 
-type DomState = typeof domState;
 type LoadingState = typeof loadingState;
 type ScaleState = typeof scaleState;
 type PageNumState = typeof pageNumState;
 type LayoutState = typeof layoutState;
 type DisplayState = typeof displayState;
+type ReaderState = typeof readerState;
 
 //#endregion
 
 //#region - 定义 actions 类型
 
 type ResetStateActions = {
-  resetDomState: () => void;
-  resetLoadingState: () => void;
-  resetScaleState: () => void;
-  resetPageNumState: () => void;
-  resetLayoutState: () => void;
+  resetReaderState: () => void;
 };
 
 type InitialActions = {
@@ -126,6 +121,7 @@ type InitialActions = {
 type loadingActions = {
   setPdfSrc: (pdfSrc: null | string | File | number) => void; // 如果 pdfSrc 是 number 类型的话那么它就是 pdfCacheId
   setIsLoading: (isLoading: boolean) => void;
+  exitReader: () => void;
   loadWorkerProxies: (src: string | File | number) => Promise<void>;
 };
 
@@ -200,8 +196,8 @@ type LayoutActions = {
 
 const usePdfReaderStore = create<
   Emitter &
+    ReaderState &
     ResetStateActions &
-    DomState &
     LoadingState &
     loadingActions &
     InitialActions &
@@ -217,30 +213,19 @@ const usePdfReaderStore = create<
   persist(
     (set, get) => ({
       emitter: new EventEmitter<EventHandlers>(),
-      ...domState,
       ...loadingState,
       ...scaleState,
       ...pageNumState,
       ...layoutState,
       ...displayState,
+      ...readerState,
 
       //#region - 定义 actions
 
       //#region - resetStateActions
-      resetDomState: () => {
-        set(domState);
-      },
-      resetLoadingState: () => {
-        set(loadingState);
-      },
-      resetScaleState: () => {
-        set(pageNumState);
-      },
-      resetPageNumState: () => {
-        set(pageNumState);
-      },
-      resetLayoutState: () => {
-        set(pageNumState);
+
+      resetReaderState: () => {
+        set(readerState);
       },
 
       //#endregion
@@ -255,9 +240,8 @@ const usePdfReaderStore = create<
       setPdfSrc: (pdfSrc) => {
         if (pdfSrc || pdfSrc === 0) {
           get().loadWorkerProxies(pdfSrc);
-          set({ showHistory: true });
         } else {
-          set({ isPdfActive: false, pdfCacheId: null });
+          get().exitReader();
         }
       },
 
@@ -265,12 +249,17 @@ const usePdfReaderStore = create<
         set({ isLoading });
       },
 
+      exitReader: () => {
+        set({ isPdfActive: false, pdfCacheId: null, pages: [] });
+        pdfWorker.execute("abortLoading");
+      },
+
       loadWorkerProxies: async (src) => {
         const { emitter } = get();
-        const { thumbSize } = get();
+        set({ isPdfActive: true });
         try {
           const { data: pdfCacheId } = await pdfWorker
-            .execute("load", [], src, thumbSize)
+            .execute("load", [], src)
             .addEventListener("message", async (res) => {
               const data = res.data;
               const pagesWP = await data.pdfPageProxies;
@@ -287,11 +276,12 @@ const usePdfReaderStore = create<
                 };
                 pages.push(page);
               }
-              set({ pages, isPdfActive: true });
+              set({ pages });
               emitter.emit("onLoadingSucsess");
             }).promise;
-          set({ pdfCacheId });
+          set({ pdfCacheId, showHistory: true });
         } catch (error) {
+          get().exitReader();
           console.error(error);
           emitter.emit("onLoadingError");
         }

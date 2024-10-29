@@ -5,7 +5,9 @@ import usePdfReaderStore from "src/stores/usePdfReaderStore";
 import { onupgradeneeded } from "src/utils/indexedDB";
 import Icon from "src/components/GlobalComponents/Icon";
 import { colors } from "src/configs/theme";
-import { Modal, Toast } from "@douyinfe/semi-ui";
+import { Modal } from "@douyinfe/semi-ui";
+import { pdfWorker } from "src/workers/pdf.main";
+import * as yaml from "js-yaml";
 
 interface PDFHistoryProps extends Props {}
 
@@ -28,24 +30,6 @@ export default memo(function PDFHistory({
   const setHistorySelectMode = usePdfReaderStore((s) => s.setHistorySelectMode);
   const checkAll = usePdfReaderStore((s) => s.checkAll);
   const setCheckAll = usePdfReaderStore((s) => s.setCheckAll);
-
-  useEffect(() => {
-    const onLoadingSucsess = () => {
-      setIsloading(false);
-    };
-    pdfReaderEmitter.on("onLoadingSucsess", onLoadingSucsess);
-    const onLoadingError = () => {
-      Toast.error("加载失败，请选择有效的资源");
-      setIsloading(false);
-    };
-    pdfReaderEmitter.on("onLoadingError", onLoadingError);
-
-    return () => {
-      pdfReaderEmitter.off("onLoadingSucsess", onLoadingSucsess);
-      pdfReaderEmitter.off("onLoadingError", onLoadingError);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -80,8 +64,28 @@ export default memo(function PDFHistory({
   const getCacheData = useCallback(() => {
     const request = indexedDB.open("pdf_cache");
 
-    // 初次打开时创建 objectStore
-    request.onupgradeneeded = onupgradeneeded;
+    request.onupgradeneeded = async (e) => {
+      // 初次打开或数据库版本升级时创建 objectStore
+      onupgradeneeded(e);
+      // 初次打开时根据配置文件载入 statics 中的 pdf
+      if (e.oldVersion === 0) {
+        const { origin } = window.location;
+        const response = await fetch(origin + "/statics/statics.yaml");
+        const { fileNames, path } = yaml.load(await response.text()) as {
+          fileNames: number[];
+          path: string;
+        };
+        for (const fileName of fileNames) {
+          try {
+            await pdfWorker.execute("addCache", [], origin + path + fileName)
+              .promise;
+            getCacheData();
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      }
+    };
 
     request.onsuccess = (e) => {
       const db = (e.target as IDBRequest).result as IDBDatabase;
@@ -100,7 +104,7 @@ export default memo(function PDFHistory({
         error;
       }
     };
-  }, []);
+  }, [thumbSize]);
 
   const deleteCacheData = useCallback((id: number) => {
     return new Promise<void>((resolve, reject) => {

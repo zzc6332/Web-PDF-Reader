@@ -3,6 +3,7 @@ import DocumentContainer from "./DocumentContainer";
 import ThumbnailsContainer from "./ThumbnailsContainer";
 import Props from "src/types/props";
 import usePdfReaderStore from "src/stores/usePdfReaderStore";
+import { Spin } from "@douyinfe/semi-ui";
 
 interface DocumentLoadingProps extends Props {}
 
@@ -13,6 +14,7 @@ export default memo(function MainContent({
   const className = classNameProp || "";
 
   const isPdfActive = usePdfReaderStore((s) => s.isPdfActive);
+  const isLoading = usePdfReaderStore((s) => s.isLoading);
 
   // sideSheetEl 是一个侧边栏，可以控制它的显示与隐藏，其唯一直接子元素是 thumbnailsContainer
   const sideSheetElRef = useRef<HTMLDivElement>(null);
@@ -49,6 +51,17 @@ export default memo(function MainContent({
         />
       </div>
       <DocumentContainer className="flex-auto" />
+      {isLoading ? (
+        <div className="absolute left-0 top-0 z-1 h-full w-full flex items-center justify-center bg-bg-translucence-2">
+          <div className="b-radius h-30 w-40 flex flex-col items-center justify-center rounded-xl bg-bg-3 opacity-75">
+            <Spin size="large"></Spin>
+            <div className="h-3"></div>
+            <div>加载中...</div>
+          </div>
+        </div>
+      ) : (
+        ""
+      )}
     </div>
   );
 });

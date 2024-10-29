@@ -49,14 +49,14 @@ export default memo(function DocumentContainer({
     (s) => s.specifyDocumentContainer
   );
 
-  const resetDomState = usePdfReaderStore((s) => s.resetDomState);
+  const resetReaderState = usePdfReaderStore((s) => s.resetReaderState);
 
   // * 将 documentContainer 元素传给 store 管理，使得 store 中可以实时获得容器的 scroll 等信息
   useEffect(() => {
     specifyDocumentContainer(documentContainerRef.current);
     return () => {
       // 离开组件时对 store 中的一些 state 进行重置
-      resetDomState();
+      resetReaderState();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

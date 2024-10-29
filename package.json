@@ -19,6 +19,7 @@
     "@unocss/reset": "^0.59.1",
     "axios": "^1.6.8",
     "events": "^3.3.0",
+    "js-yaml": "^4.1.0",
     "lodash-es": "^4.17.21",
     "pdfjs-dist": "^4.0.379",
     "react": "^18.2.0",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.0.2",
     "@eslint/js": "^9.0.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.12.7",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",

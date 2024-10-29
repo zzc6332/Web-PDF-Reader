@@ -23,6 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-statics
+statics/*
+!statics/statics.yaml
 
 src/worker-handler
