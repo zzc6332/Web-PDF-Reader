@@ -139,7 +139,7 @@ export default memo(function PDFHistory({
     } catch (error) {
       console.error(error);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deleteCacheData, getCacheData, selectedList]);
 
   useEffect(() => {
@@ -155,7 +155,15 @@ export default memo(function PDFHistory({
 
   // 从 indexedDB 中获取缓存数据
   useEffect(() => {
-    getCacheData();
+    if (isPdfActive) {
+      // 打开 pdf 时有可能出现新增了历史记录的情况，此时进行一次加载，使得 PDFHistory 中的内容能提前加载完毕；由于 indexedDB 中添加数据在 worker 线程中进行，会有一定延迟，所以在定时器中处理
+      setTimeout(() => {
+        getCacheData();
+      }, 300);
+    } else {
+      // 初次打开时需要立即加载历史数据
+      getCacheData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPdfActive]);
 

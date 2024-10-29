@@ -255,6 +255,7 @@ const usePdfReaderStore = create<
       setPdfSrc: (pdfSrc) => {
         if (pdfSrc || pdfSrc === 0) {
           get().loadWorkerProxies(pdfSrc);
+          set({ showHistory: true });
         } else {
           set({ isPdfActive: false, pdfCacheId: null });
         }
