@@ -384,6 +384,7 @@ export default memo(function DocumentContainer({
   }, [viewScale]);
 
   useEffect(() => {
+    updateCurrentPageNum();
     if (!pages.length) return;
     pdfReaderEmitter.emit("enableRerenderOnScroll");
     // console.log("enableRerenderOnScroll");

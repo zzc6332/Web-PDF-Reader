@@ -104,7 +104,7 @@ export default memo(function PDFHistory({
         error;
       }
     };
-  }, [thumbSize]);
+  }, []);
 
   const deleteCacheData = useCallback((id: number) => {
     return new Promise<void>((resolve, reject) => {
