@@ -27,3 +27,5 @@ statics/*
 !statics/statics.yaml
 
 src/worker-handler
+
+/stats.html
