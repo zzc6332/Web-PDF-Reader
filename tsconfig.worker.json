@@ -21,6 +21,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": [
@@ -32,5 +33,6 @@
     "src/workers/pdf.worker.ts",
     "src/worker-handler/worker.ts/",
     "src/vite-env.d.ts",
+    "src/types/global.d.ts",
   ],
 }
